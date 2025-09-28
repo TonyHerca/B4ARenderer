@@ -1,0 +1,25 @@
+# B4A / Android build outputs
+Objects/
+*.apk
+*.aab
+*.dex
+*.apk.res
+*.tmp
+*.log
+
+# IDE/OS cruft
+*.bak
+*.orig
+*.swp
+.DS_Store
+Thumbs.db
+
+# Signing keys (DO NOT COMMIT!)
+*.keystore
+*.jks
+*.p12
+*.key
+
+# Gradle caches if any Android SDK/Gradle bits appear
+.gradle/
+local.properties

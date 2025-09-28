@@ -1,0 +1,194 @@
+﻿Build1=Default,b4a.sim3d
+File1=cow.obj
+File2=pumpkin.obj
+File3=teapot.obj
+File4=teddybear.obj
+FileGroup1=Default Group
+FileGroup2=Default Group
+FileGroup3=Default Group
+FileGroup4=Default Group
+Group=Default Group
+Library1=core
+Library2=gesturedetector
+Library3=javaobject
+Library4=rippledrawable
+Library5=xui
+Library6=threading
+ManifestCode='This code will be applied to the manifest file during compilation.~\n~'You do not need to modify it in most cases.~\n~'See this link for for more information: https://www.b4x.com/forum/showthread.php?p=78136~\n~AddManifestText(~\n~<uses-sdk android:minSdkVersion="21" android:targetSdkVersion="35"/>~\n~<supports-screens android:largeScreens="true" ~\n~    android:normalScreens="true" ~\n~    android:smallScreens="true" ~\n~    android:anyDensity="true"/>)~\n~SetApplicationAttribute(android:icon, "@drawable/icon")~\n~SetApplicationAttribute(android:label, "$LABEL$")~\n~CreateResourceFromFile(Macro, Themes.LightTheme)~\n~'End of default text.~\n~SetApplicationAttribute(android:hardwareAccelerated, "true")
+Module1=cCamera
+Module10=PopoverPanelView
+Module11=SliderView
+Module12=Starter
+Module13=UI
+Module2=cLight
+Module3=cMaterial
+Module4=cMesh
+Module5=ControlsPanel
+Module6=cRenderer
+Module7=cScene
+Module8=JoyStickView
+Module9=Math3D
+NumberOfFiles=4
+NumberOfLibraries=6
+NumberOfModules=13
+Version=13.4
+@EndOfDesignText@
+#Region  Project Attributes 
+    #ApplicationLabel: SimpleRayTrace
+    #VersionCode: 1
+    #VersionName: 1.0
+    #SupportedOrientations: portrait
+    #CanInstallToExternalStorage: False
+#End Region
+
+#Region  Activity Attributes 
+    #FullScreen: True
+    #IncludeTitle: False
+#End Region
+
+Sub Process_Globals
+	' ---------- types ----------
+	Type Ray(Origin As Vec3, Dir As Vec3)
+	Type Hit(T As Double, FaceIndex As Int, U As Double, V As Double)
+	Type FrameData(Verts As List, Faces As List, FaceN As List, Refl As List)
+	
+	Public Const MODE_RASTER As Int = 0
+	Public Const MODE_RAYTRACE As Int = 1
+	
+	Dim Timer As Timer
+
+	Dim Scene As cScene
+End Sub
+
+Sub Globals
+	Dim pnl As Panel
+	Dim cvs As Canvas
+	Dim scrW As Int, scrH As Int
+	
+	Dim Controls As ControlsPanel
+	
+	
+	
+	
+	
+	Dim Renderer As cRenderer
+	Dim Opt As RenderOptions
+
+	
+	Public remFrames As Int = 10
+	
+End Sub
+
+Sub Activity_Create(FirstTime As Boolean)
+	
+'	=========== UI ===========
+ 
+	pnl.Initialize("")
+	Activity.AddView(pnl, 0, 0, 100%x, 100%y)
+	Controls.Initialize
+	Activity.AddView(Controls.panelmain, 0, 0, 100%x, 100%y)
+	Controls.build
+	
+'	========= SCENE ==========
+	Scene.Initialize
+	' Materials
+	Dim mTeapot As cMaterial : mTeapot.Initialize("Teapot") : mTeapot.Albedo = Colors.RGB(200,180,150) : mTeapot.Reflectivity = 0.35
+	Dim matId As Int = Scene.AddMaterial(mTeapot)
+	
+'	Meshes
+	Dim teapot As cMesh : teapot.Initialize("Teapot")
+	teapot.LoadOBJFromAssets("teapot.obj", matId)
+	teapot.SetTRS(Math3D.V3(0,0,0), Math3D.V3(0,0,0), 0.2)
+	Scene.AddMesh(teapot)
+	
+		
+	Dim bear As cMesh : bear.Initialize("Teddybear")
+	bear.LoadOBJFromAssets("teddybear.obj", matId)
+	bear.SetTRS(Math3D.V3(0,-20.5,-2), Math3D.V3(0,0,0), 0.03)
+	
+	Scene.AddMesh(bear)
+	
+	
+	Renderer.Initialize
+	Opt.BackfaceCull = True : Opt.DrawFaces = True : Opt.DrawEdges = True : Opt.DrawVerts = False
+	
+
+	cvs.Initialize(pnl)
+	
+'	========= RENDER ==========
+
+	Dim rendstats As RenderStats = Renderer.RenderRaster(cvs, pnl.Width, pnl.Height, Scene, Opt)
+	Log(rendstats)
+	pnl.Invalidate
+	Timer.Initialize("timer", 16)
+	Timer.Enabled = True
+	
+	scrW = pnl.Width : scrH = pnl.Height
+	
+'	Timer.Enabled = False
+'	pnl.Visible = False
+'	Controls.panelmain.Visible = False
+
+	
+End Sub
+
+Sub timer_Tick
+	
+	'Deadzone to avoid drift
+	Dim dead As Float = 0.08
+	Dim x As Float = Controls.gJoyXMove
+	Dim y As Float = Controls.gJoyYMove
+	If Abs(x) < dead Then x = 0
+	If Abs(y) < dead Then y = 0
+	Dim maxStep As Float = .1
+	Dim maxStep As Float = Scene.Camera.MoveSpeed
+	Scene.Camera.Truck(x * maxStep)
+	Scene.Camera.Dolly(-y * maxStep)
+	
+	Dim xLook As Float = Controls.gJoyXLook
+	Dim yLook As Float = Controls.gJoyYLook
+	If Abs(xLook) < dead Then xLook = 0
+	If Abs(yLook) < dead Then yLook = 0
+	Dim maxStepLook As Float = .05
+	Dim maxStepLook As Float = Scene.Camera.TurnSpeed
+	Scene.Camera.PanTilt(-xLook * maxStepLook, -yLook * maxStepLook)
+	
+	Dim xScale As Float = Controls.gJoyXScale
+	Dim yScale As Float = Controls.gJoyYScale
+	If Abs(xScale) < dead Then xScale = 0
+	If Abs(yScale) < dead Then yScale = 0
+	Dim maxStepScale As Float = .01 '0.005 to 0.02
+	Dim mesh As cMesh = Scene.Meshes.Get("Teddybear")
+	mesh.SetTRS(mesh.Position, mesh.Rotation, mesh.Scale + -yScale * maxStepScale)
+
+'	RenderRaster
+	Renderer.RenderRaster(cvs, pnl.Width, pnl.Height, Scene, Opt)
+	pnl.Invalidate
+	
+	
+	remFrames = remFrames - 1
+	If remFrames = 0 Then 
+		Timer.Enabled = False
+		Return 
+	End If
+
+End Sub
+
+Public Sub resetTimer
+	remFrames = 10
+	Timer.Enabled = True
+End Sub
+
+public Sub renderRaytraced
+	Timer.Enabled = False
+	
+	
+	Dim raytrace As ResumableSub = Renderer.RenderRaytrace(Scene, pnl.Width/10, pnl.Height/10)
+	Wait For (raytrace) Complete (bmp As Bitmap)
+	Log("3")
+	Dim rect As Rect : rect.Initialize(0, 0, 100%x, 100%y)
+	cvs.DrawBitmap(bmp, Null, rect)
+	pnl.Invalidate
+	Log("ads")
+	
+End Sub
