@@ -8,7 +8,10 @@ Version=13.4
 Sub Class_Globals
 	Type RenderOptions(BackfaceCull As Boolean, DrawFaces As Boolean, DrawEdges As Boolean, DrawVerts As Boolean)
 	Type RenderStats(TotalFaces As Int, CulledFaces As Int, DrawnFaces As Int, BuildMs As Int, RenderMs As Int)
-
+	Type Ray(Origin As Vec3, Dir As Vec3)
+	Type Hit(T As Double, FaceIndex As Int, U As Double, V As Double)
+	Type FrameData(Verts As List, Faces As List, FaceN As List, Refl As List)
+	
 	Public Const MODE_RASTER As Int = 0
 	Public Const MODE_RAYTRACE As Int = 1
 	Public RENDER_MODE As Int = 0
@@ -18,7 +21,7 @@ Sub Class_Globals
 	Private MT_Pending As Int
 	
 	Private RT_Verts As List, RT_Faces As List, RT_FaceN As List, RT_Refl As List
-
+	Private RT_AlbR As List, RT_AlbG As List, RT_AlbB As List
 	
 	Private RT_CamPos As Vec3
 	Private RT_Right As Vec3, RT_Up As Vec3, RT_Fwd As Vec3
@@ -47,7 +50,6 @@ Public Sub Initialize
 	testTimer.Initialize("timer", 50)
 	
 End Sub
-
 
 ' --- RASTER ---
 Public Sub RenderRaster(cvs As Canvas, dstW As Int, dstH As Int, scene As cScene, opt As RenderOptions) As RenderStats
@@ -224,15 +226,22 @@ Public Sub RenderRaytrace(scene As cScene, Width As Int, Height As Int) As Resum
 		Dim k As Double = 0
 		If matIdx >= 0 And matIdx < scene.Materials.Size Then
 			Dim M As cMaterial = scene.Materials.Get(matIdx)
-			If M.Reflectivity < 0 Then
-				k = 0
-			Else If M.Reflectivity > 1 Then
-				k = 1
-			Else
-				k = M.Reflectivity
-			End If
+			k = Max(0, Min(1, M.Reflectivity))
 		End If
 		RT_Refl.Add(k)
+	Next
+	RT_AlbR.Initialize : RT_AlbG.Initialize : RT_AlbB.Initialize
+	For i = 0 To fr.Faces.Size - 1
+		Dim matIdx As Int = fr.FaceMat.Get(i)
+		Dim col As Int = Colors.RGB(60,160,255)   ' fallback
+		If matIdx >= 0 And matIdx < scene.Materials.Size Then
+			Dim M As cMaterial = scene.Materials.Get(matIdx)
+			col = M.Albedo
+		End If
+		Dim r As Double = Bit.And(Bit.ShiftRight(col,16),255) / 255.0
+		Dim g As Double = Bit.And(Bit.ShiftRight(col, 8),255) / 255.0
+		Dim b As Double = Bit.And(col, 255) / 255.0
+		RT_AlbR.Add(r) : RT_AlbG.Add(g) : RT_AlbB.Add(b)
 	Next
 
 	' ---- precompute accel (AABB + sphere) ----
@@ -541,11 +550,16 @@ Private Sub TraceColor(r As Ray, depth As Int, v As List, f As List, fn As List,
 	End If
 
 	' base bluish (swap to per-material if you like)
-	Dim base As Vec3 = Math3D.V3(60/255.0, 160/255.0, 255/255.0)
+	Dim base As Vec3 = Math3D.V3( _
+	    RT_AlbR.Get(h.FaceIndex), _
+	    RT_AlbG.Get(h.FaceIndex), _
+	    RT_AlbB.Get(h.FaceIndex))
 	Dim direct As Vec3 = Math3D.V3( _
         base.X*(0.1 + 0.9*lam), _
         base.Y*(0.1 + 0.9*lam), _
         base.Z*(0.1 + 0.9*lam))
+		
+	
 
 	' reflection mix
 	Dim k As Double = refl.Get(h.FaceIndex)
@@ -559,33 +573,14 @@ Private Sub TraceColor(r As Ray, depth As Int, v As List, f As List, fn As List,
 	Return Math3D.V3( direct.X*(1-k) + rc.X*k, direct.Y*(1-k) + rc.Y*k, direct.Z*(1-k) + rc.Z*k )
 End Sub
 
+
+'0 - raster
+'1 - raytrace
+public Sub setRenderMode(mode As Int)
+	RENDER_MODE = mode
+End Sub
+
 'Private Sub ColorToInt01(r As Double, g As Double, b As Double) As Int
 '	Return Math3D.ARGB255(255, r*255, g*255, b*255)
 'End Sub
 
-
-'fwd [IsInitialized=True, X=0.0, Y=-0.1520571842539411
-', Z=-0.9883716976506172]
-'right [IsInitialized=True, X=1.0, Y=-0.0
-', Z=0.0]
-'up [IsInitialized=True, X=0.0, Y=0.9883716976506172
-', Z=-0.1520571842539411]
-'START +++++ Camera stuff
-'CamTarget [IsInitialized=True, X=0.0, Y=0.4
-', Z=0.0]
-'CamPos [IsInitialized=True, X=0.0, Y=0.8
-', Z=2.6]
-'CamUp [IsInitialized=True, X=0.0, Y=1.0
-', Z=0.0]
-'CamFOV_Deg 60
-'scrW 1440
-'scrH 2954
-'NearZ 0.5
-'FarZ 1000
-'End +++++++ Camera stuff
-'aspect 0.48747461069735953
-'fovRad 1.0471975511965976
-'f 1.7320508075688774
-'
-
-'DIFFS - fws, 

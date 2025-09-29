@@ -135,10 +135,20 @@ End Sub
 public Sub CreateModel(name As String, mesh As cMesh, mat As cMaterial) As cModel
 	Dim newModel As cModel
 	newModel.Initialize(name, mesh, mat)
+	Return newModel
 End Sub
 
-Public Sub CreateMesh(name As String, prim)
+Public Sub CreateMesh(name As String) As cMesh
 	Dim newMesh As cMesh
 	newMesh.Initialize(name)
-	
+	Return newMesh
+End Sub
+
+Public Sub CreateMaterial(name As String, albedo As Int, reflectivity As Double) As cMaterial
+	Dim newMaterial As cMaterial
+	newMaterial.Initialize(name)
+	newMaterial.Albedo = albedo
+	newMaterial.Reflectivity = reflectivity
+	newMaterial.id = AddMaterial(newMaterial)
+	Return newMaterial
 End Sub

@@ -181,12 +181,15 @@ Sub RenderWire_Click
 End Sub
 
 Sub RenderSolid_Click
+	Main.Renderer.setRenderMode(0)
 	CallSub(Main, "resetTimer")
 End Sub
 
 Sub RenderShaded_Click
+	Main.Renderer.setRenderMode(1)
+	CallSub(Main, "resetTimer")
 	
-	CallSub(Main, "renderRaytraced")
+'	CallSub(Main, "renderRaytraced")
 End Sub
 
 

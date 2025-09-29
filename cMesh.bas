@@ -330,6 +330,7 @@ End Sub
 
 Public Sub BuildUVSphere(radius As Double, seg As Int, rings As Int, matIdx As Int)
 	ClearAll
+	Log("adding sphere with index ->  " & matIdx)
 	If seg < 3 Then seg = 3
 	If rings < 2 Then rings = 2
 

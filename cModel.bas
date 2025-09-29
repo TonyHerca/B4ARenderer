@@ -9,7 +9,7 @@ Sub Class_Globals
 	Public Name As String
 	Public Mesh As cMesh            ' shared geometry
 	Public Material As cMaterial    ' shared material
-	Public MatId As Int = -1        ' index in scene.Materials (for renderer lookups)
+	Public MatId As Int = 1       ' index in scene.Materials (for renderer lookups)
 
 	' per-instance controls
 	Public Visible As Boolean = True
@@ -25,7 +25,7 @@ Sub Class_Globals
 End Sub
 
 Public Sub Initialize(n As String, мMesh As cMesh, mat As cMaterial)
-	Name = n : Mesh = мMesh : Material = mat
+	Name = n : Mesh = мMesh : Material = mat : matid = mat.id
 End Sub
 
 Public Sub SetTRS(pos As Vec3, rot As Vec3, s As Double)
