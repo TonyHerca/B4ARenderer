@@ -180,3 +180,282 @@ Public Sub EnsureFacing(desired As Vec3)
 		If Math3D.Dot(n, desired) < 0 Then ReverseWindingFace(i)
 	Next
 End Sub
+
+
+' Clear + add helpers
+Public Sub ClearAll
+	Verts.Clear : Faces.Clear : FaceN.Clear : FaceMat.Clear
+	MinY = 0 : MaxY = 0
+End Sub
+
+Private Sub AddVRet(x As Double, y As Double, z As Double) As Int
+	Verts.Add(Math3D.V3(x,y,z))
+	Return Verts.Size - 1
+End Sub
+
+Private Sub AddTriIdx(a As Int, b As Int, c As Int, matIdx As Int)
+	Faces.Add(Math3D.F3(a,b,c))
+	FaceMat.Add(matIdx)
+End Sub
+
+' Plane in XZ at y = const, centered, normal = +Y
+Public Sub BuildPlaneXZ(width As Double, depth As Double, y As Double, segX As Int, segZ As Int, matIdx As Int)
+	ClearAll
+	If segX < 1 Then segX = 1
+	If segZ < 1 Then segZ = 1
+
+	Dim x0 As Double = -width/2, z0 As Double = -depth/2
+	Dim dx As Double = width / segX, dz As Double = depth / segZ
+
+	' verts
+	For zi = 0 To segZ
+		For xi = 0 To segX
+			Dim x As Double = x0 + xi*dx, z As Double = z0 + zi*dz
+			AddVRet(x, y, z)
+		Next
+	Next
+
+	' faces (CCW for +Y)
+	Dim cols As Int = segX + 1
+	For zi = 0 To segZ - 1
+		For xi = 0 To segX - 1
+			Dim v00 As Int = zi*cols + xi
+			Dim v10 As Int = v00 + 1
+			Dim v01 As Int = v00 + cols
+			Dim v11 As Int = v01 + 1
+			AddTriIdx(v00, v10, v11, matIdx)
+			AddTriIdx(v00, v11, v01, matIdx)
+		Next
+	Next
+
+	RecalcFaceNormals
+	UpdateYBounds
+End Sub
+
+' Plane in XY at z = const, centered, normal = +Z
+Public Sub BuildPlaneXY(width As Double, height As Double, z As Double, segX As Int, segY As Int, matIdx As Int)
+	ClearAll
+	If segX < 1 Then segX = 1
+	If segY < 1 Then segY = 1
+
+	Dim x0 As Double = -width/2, y0 As Double = -height/2
+	Dim dx As Double = width / segX, dy As Double = height / segY
+
+	For yi = 0 To segY
+		For xi = 0 To segX
+			Dim x As Double = x0 + xi*dx, yy As Double = y0 + yi*dy
+			AddVRet(x, yy, z)
+		Next
+	Next
+
+	Dim cols As Int = segX + 1
+	For yi = 0 To segY - 1
+		For xi = 0 To segX - 1
+			Dim v00 As Int = yi*cols + xi
+			Dim v10 As Int = v00 + 1
+			Dim v01 As Int = v00 + cols
+			Dim v11 As Int = v01 + 1
+			AddTriIdx(v00, v10, v11, matIdx) ' CCW seen from +Z
+			AddTriIdx(v00, v11, v01, matIdx)
+		Next
+	Next
+
+	RecalcFaceNormals
+	UpdateYBounds
+End Sub
+
+' Plane in YZ at x = const, centered, normal = +X
+Public Sub BuildPlaneYZ(height As Double, depth As Double, x As Double, segY As Int, segZ As Int, matIdx As Int)
+	ClearAll
+	If segY < 1 Then segY = 1
+	If segZ < 1 Then segZ = 1
+
+	Dim y0 As Double = -height/2, z0 As Double = -depth/2
+	Dim dy As Double = height / segY, dz As Double = depth / segZ
+
+	For zi = 0 To segZ
+		For yi = 0 To segY
+			Dim yy As Double = y0 + yi*dy, zz As Double = z0 + zi*dz
+			AddVRet(x, yy, zz)
+		Next
+	Next
+
+	Dim cols As Int = segY + 1
+	For zi = 0 To segZ - 1
+		For yi = 0 To segY - 1
+			Dim v00 As Int = zi*cols + yi
+			Dim v10 As Int = v00 + 1
+			Dim v01 As Int = v00 + cols
+			Dim v11 As Int = v01 + 1
+			AddTriIdx(v00, v10, v11, matIdx) ' CCW seen from +X
+			AddTriIdx(v00, v11, v01, matIdx)
+		Next
+	Next
+
+	RecalcFaceNormals
+	UpdateYBounds
+End Sub
+
+Public Sub BuildCube(size As Double, matIdx As Int)
+	ClearAll
+	Dim s As Double = size/2
+
+	' 8 verts
+	Dim v0 As Int = AddVRet(-s,-s,-s)
+	Dim v1 As Int = AddVRet( s,-s,-s)
+	Dim v2 As Int = AddVRet( s, s,-s)
+	Dim v3 As Int = AddVRet(-s, s,-s)
+	Dim v4 As Int = AddVRet(-s,-s, s)
+	Dim v5 As Int = AddVRet( s,-s, s)
+	Dim v6 As Int = AddVRet( s, s, s)
+	Dim v7 As Int = AddVRet(-s, s, s)
+
+	' 12 tris (CCW outward)
+	' -Z
+	AddTriIdx(v0,v1,v2, matIdx) : AddTriIdx(v0,v2,v3, matIdx)
+	' +Z
+	AddTriIdx(v4,v6,v5, matIdx) : AddTriIdx(v4,v7,v6, matIdx)
+	' -Y
+	AddTriIdx(v0,v4,v5, matIdx) : AddTriIdx(v0,v5,v1, matIdx)
+	' +Y
+	AddTriIdx(v3,v2,v6, matIdx) : AddTriIdx(v3,v6,v7, matIdx)
+	' +X
+	AddTriIdx(v1,v5,v6, matIdx) : AddTriIdx(v1,v6,v2, matIdx)
+	' -X
+	AddTriIdx(v0,v3,v7, matIdx) : AddTriIdx(v0,v7,v4, matIdx)
+	
+	RecalcFaceNormals
+	UpdateYBounds
+End Sub
+
+Public Sub BuildUVSphere(radius As Double, seg As Int, rings As Int, matIdx As Int)
+	ClearAll
+	If seg < 3 Then seg = 3
+	If rings < 2 Then rings = 2
+
+	' verts (rings+1) * (seg+1) (duplicate seam)
+	For r = 0 To rings
+		Dim v As Double = r / rings     ' 0..1
+		Dim phi As Double = v * cPI     ' 0..pi
+		Dim sy As Double = Cos(phi)
+		Dim sr As Double = Sin(phi)
+		For s = 0 To seg
+			Dim u As Double = s / seg       ' 0..1
+			Dim theta As Double = u * 2*cPI
+			Dim sx As Double = Cos(theta) * sr
+			Dim sz As Double = Sin(theta) * sr
+			AddVRet(radius*sx, radius*sy, radius*sz)
+		Next
+	Next
+
+	Dim cols As Int = seg + 1
+	For r = 0 To rings - 1
+		For s = 0 To seg - 1
+			Dim v00 As Int = r*cols + s
+			Dim v10 As Int = v00 + 1
+			Dim v01 As Int = v00 + cols
+			Dim v11 As Int = v01 + 1
+			' CCW outward
+			AddTriIdx(v00, v10, v11, matIdx)
+			AddTriIdx(v00, v11, v01, matIdx)
+		Next
+	Next
+
+	RecalcFaceNormals
+	UpdateYBounds
+End Sub
+
+' Cylinder along Y, centered at origin, height h
+Public Sub BuildCylinder(radius As Double, height As Double, seg As Int, capTop As Boolean, capBottom As Boolean, matIdx As Int)
+	ClearAll
+	If seg < 3 Then seg = 3
+	Dim hy As Double = height/2
+
+	' rings
+	Dim baseStart As Int = Verts.Size
+	For i = 0 To seg
+		Dim t As Double = i / seg * 2*cPI
+		Dim x As Double = Cos(t) * radius
+		Dim z As Double = Sin(t) * radius
+		AddVRet(x, -hy, z)  ' bottom ring
+	Next
+	Dim topStart As Int = Verts.Size
+	For i = 0 To seg
+		Dim t As Double = i / seg * 2*cPI
+		Dim x As Double = Cos(t) * radius
+		Dim z As Double = Sin(t) * radius
+		AddVRet(x, hy, z)  ' top ring
+	Next
+
+	' side quads -> 2 triangles, CCW outward
+	For i = 0 To seg - 1
+		Dim b0 As Int = baseStart + i
+		Dim b1 As Int = baseStart + i + 1
+		Dim t0 As Int = topStart + i
+		Dim t1 As Int = topStart + i + 1
+		AddTriIdx(b0, b1, t1, matIdx)
+		AddTriIdx(b0, t1, t0, matIdx)
+	Next
+
+	' caps
+	If capTop Then
+		Dim c As Int = AddVRet(0, hy, 0)
+		For i = 0 To seg - 1
+			Dim a As Int = topStart + i
+			Dim b As Int = topStart + i + 1
+			' CCW seen from +Y (outward)
+			AddTriIdx(a, b, c, matIdx)
+		Next
+	End If
+	If capBottom Then
+		Dim c2 As Int = AddVRet(0, -hy, 0)
+		For i = 0 To seg - 1
+			Dim a As Int = baseStart + i
+			Dim b As Int = baseStart + i + 1
+			' CCW seen from -Y (outward) => reverse order
+			AddTriIdx(b, a, c2, matIdx)
+		Next
+	End If
+
+	RecalcFaceNormals
+	UpdateYBounds
+End Sub
+
+' Cone along Y, apex at +hy, base at -hy
+Public Sub BuildCone(radius As Double, height As Double, seg As Int, capBase As Boolean, matIdx As Int)
+	ClearAll
+	If seg < 3 Then seg = 3
+	Dim hy As Double = height/2
+
+	' base ring
+	Dim baseStart As Int = Verts.Size
+	For i = 0 To seg
+		Dim t As Double = i / seg * 2*cPI
+		Dim x As Double = Cos(t) * radius
+		Dim z As Double = Sin(t) * radius
+		AddVRet(x, -hy, z)
+	Next
+	' apex
+	Dim apex As Int = AddVRet(0, hy, 0)
+
+	' sides (triangles), CCW outward
+	For i = 0 To seg - 1
+		Dim a As Int = baseStart + i
+		Dim b As Int = baseStart + i + 1
+		AddTriIdx(a, b, apex, matIdx)
+	Next
+
+	' base cap (outward is -Y)
+	If capBase Then
+		Dim c As Int = AddVRet(0, -hy, 0)
+		For i = 0 To seg - 1
+			Dim a As Int = baseStart + i
+			Dim b As Int = baseStart + i + 1
+			' CCW seen from -Y => reverse order
+			AddTriIdx(b, a, c, matIdx)
+		Next
+	End If
+
+	RecalcFaceNormals
+	UpdateYBounds
+End Sub

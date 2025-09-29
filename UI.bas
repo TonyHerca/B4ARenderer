@@ -40,3 +40,9 @@ public Sub GetDrawable(color As Int, roundC As Int) As ColorDrawable
 	cd.Initialize(color, roundC)
 	Return cd
 End Sub
+
+public Sub GetDrawableWithBorder(color As Int, roundC As Int, borderWidth As Int, bordercolor As Int) As ColorDrawable
+	Dim cd As ColorDrawable
+	cd.Initialize2(color, roundC, borderWidth, bordercolor)
+	Return cd
+End Sub

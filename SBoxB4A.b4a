@@ -12,25 +12,31 @@ Library1=core
 Library2=gesturedetector
 Library3=javaobject
 Library4=rippledrawable
-Library5=xui
-Library6=threading
+Library5=threading
+Library6=xui
+Library7=phone
 ManifestCode='This code will be applied to the manifest file during compilation.~\n~'You do not need to modify it in most cases.~\n~'See this link for for more information: https://www.b4x.com/forum/showthread.php?p=78136~\n~AddManifestText(~\n~<uses-sdk android:minSdkVersion="21" android:targetSdkVersion="35"/>~\n~<supports-screens android:largeScreens="true" ~\n~    android:normalScreens="true" ~\n~    android:smallScreens="true" ~\n~    android:anyDensity="true"/>)~\n~SetApplicationAttribute(android:icon, "@drawable/icon")~\n~SetApplicationAttribute(android:label, "$LABEL$")~\n~CreateResourceFromFile(Macro, Themes.LightTheme)~\n~'End of default text.~\n~SetApplicationAttribute(android:hardwareAccelerated, "true")
-Module1=cCamera
-Module10=PopoverPanelView
-Module11=SliderView
-Module12=Starter
-Module13=UI
-Module2=cLight
-Module3=cMaterial
-Module4=cMesh
-Module5=ControlsPanel
-Module6=cRenderer
-Module7=cScene
-Module8=JoyStickView
-Module9=Math3D
+Module1=ButtonToggle
+Module10=CustomButton
+Module11=EditVec3Field
+Module12=JoyStickView
+Module13=Math3D
+Module14=ModelBar
+Module15=PopoverPanelView
+Module16=SliderView
+Module17=Starter
+Module18=UI
+Module2=cCamera
+Module3=cLight
+Module4=cMaterial
+Module5=cMesh
+Module6=cModel
+Module7=ControlsPanel
+Module8=cRenderer
+Module9=cScene
 NumberOfFiles=4
-NumberOfLibraries=6
-NumberOfModules=13
+NumberOfLibraries=7
+NumberOfModules=18
 Version=13.4
 @EndOfDesignText@
 #Region  Project Attributes 
@@ -89,6 +95,21 @@ Sub Activity_Create(FirstTime As Boolean)
 	Activity.AddView(Controls.panelmain, 0, 0, 100%x, 100%y)
 	Controls.build
 	
+'	Dim pnlUITest As Panel
+'	pnlUITest.Initialize("")
+'	Activity.AddView(pnlUITest, 0, 0, 100%x, 100%y)
+'	
+'	Dim newModelbar As ModelBar
+'	newModelbar.Initialize(Me, "asd")
+'	newModelbar.AddToParent(pnlUITest, 0, 0, 100%x)
+'	newModelbar.Title = "asd"
+'	
+'	Dim input3 As EditVec3Field
+'	input3.Initialize(Me, "ev")
+'	input3.AddToParent(pnlUITest, 10dip, 10dip, 100%x - 20dip)
+	
+'	Return
+	
 '	========= SCENE ==========
 	Scene.Initialize
 	' Materials
@@ -96,18 +117,79 @@ Sub Activity_Create(FirstTime As Boolean)
 	Dim matId As Int = Scene.AddMaterial(mTeapot)
 	
 '	Meshes
-	Dim teapot As cMesh : teapot.Initialize("Teapot")
-	teapot.LoadOBJFromAssets("teapot.obj", matId)
-	teapot.SetTRS(Math3D.V3(0,0,0), Math3D.V3(0,0,0), 0.2)
-	Scene.AddMesh(teapot)
+'	Dim teapot As cMesh : teapot.Initialize("Teapot")
+'	teapot.LoadOBJFromAssets("teapot.obj", matId)
+'	teapot.SetTRS(Math3D.V3(0,0,0), Math3D.V3(0,0,0), 0.2)
+'	Scene.AddMesh(teapot)
+'	
+'	Dim bear As cMesh : bear.Initialize("Teddybear")
+'	bear.LoadOBJFromAssets("teddybear.obj", matId)
+'	bear.SetTRS(Math3D.V3(0,-20.5,-2), Math3D.V3(0,0,0), 0.03)
+'	
+	Dim mPot As cMaterial : mPot.Initialize("Teapot") : mPot.Albedo = Colors.RGB(210,180,140) : mPot.Reflectivity = 0.35
+	Scene.AddMaterial(mPot)
+	Dim meshPot As cMesh : meshPot.Initialize("Teapot") : meshPot.LoadOBJFromAssets("teapot.obj", 0)
+	Dim mdlPot As cModel = Scene.AddModelCreate("Pot1", meshPot, mPot)
+	mdlPot.SetTRS(Math3D.V3(0,0,0), Math3D.V3(0,0,0), 0.2)
 	
-		
-	Dim bear As cMesh : bear.Initialize("Teddybear")
-	bear.LoadOBJFromAssets("teddybear.obj", matId)
-	bear.SetTRS(Math3D.V3(0,-20.5,-2), Math3D.V3(0,0,0), 0.03)
+	Dim mFloor As cMaterial : mFloor.Initialize("matFloor") : mFloor.Albedo = Colors.RGB(200,200,200)
+	Scene.AddMaterial(mFloor)
+	Dim meshFloor As cMesh : meshFloor.Initialize("Floor") : meshFloor.BuildPlaneXZ(10, 8, 0, 1, 1, mFloor.id)
+	meshFloor.FlipNormalsAll
+	Dim mdlFloor As cModel = Scene.AddModelCreate("floor1", meshFloor, mFloor)
+	mdlFloor.SetTRS(Math3D.SubV(mdlFloor.Position, Math3D.V3(0, 1, 0)), Math3D.V3(0,0,0), 1)
 	
-	Scene.AddMesh(bear)
 	
+	Dim meshWall As cMesh : meshWall.Initialize("BackWall") : meshWall.BuildPlaneXY(10, 5, -3, 1, 1, mFloor.id)
+	Dim mdlWall As cModel = Scene.AddModelCreate("wall1", meshWall, mFloor)
+	
+	Dim meshCube As cMesh
+	meshCube.Initialize("cube")
+	meshCube.BuildCube(1, mPot.id)
+	Dim mdlCube As cModel
+	mdlCube.Initialize("cubemodel", meshCube, mPot)
+	Scene.AddModel(mdlCube)
+	mdlCube.SetTRS(Math3D.V3(2,0,0), Math3D.V3(0,0,0), 0.2)
+	mdlCube.Mesh.FlipNormalsAll
+	
+	Dim meshcyl As cMesh
+	meshcyl.Initialize("cyl")
+	meshcyl.BuildCylinder(1, 1, 16, True, True, mPot.id)
+	Dim modelcyl As cModel
+	modelcyl.Initialize("cylmodel", meshcyl, mPot)
+	Scene.AddModel(modelcyl)
+	modelcyl.SetTRS(Math3D.V3(-2,0,0), Math3D.V3(0,0,0), 0.2)
+	modelcyl.Mesh.FlipNormalsAll
+	
+	Dim meshcone As cMesh
+	meshcone.Initialize("cone")
+	meshcone.Buildcone(1, 1, 4, True, mPot.id)
+	Dim mdlcone As cModel
+	mdlcone.Initialize("conemodel", meshcone, mPot)
+	Scene.AddModel(mdlcone)
+	mdlcone.SetTRS(Math3D.V3(-1,0,0), Math3D.V3(0,0,0), 0.2)
+	mdlcone.Mesh.FlipNormalsAll
+	
+	
+	Dim meshsphere As cMesh
+	meshsphere.Initialize("sphere")
+	meshsphere.BuildUVSphere(1, 10, 10, mPot.id)
+	Dim mdlsphere As cModel
+	mdlsphere.Initialize("spheremodel", meshsphere, mPot)
+	Scene.AddModel(mdlsphere)
+	mdlsphere.SetTRS(Math3D.V3(1,0,0), Math3D.V3(0,0,0), 0.2)
+	
+	
+	
+'	mdlWall.SetTRS(Math3D.V3(0,0,0), Math3D.V3(0,0,0), 1)
+	
+'	Scene.Selected = mdlPot
+'	Scene.Selected.Position = Math3D.V3(0.3, 0, 0)
+'	Scene.Selected.Rotation = Math3D.V3(0, 0.6, 0)
+	
+'	Scene.AddMesh(bear)
+	
+	Controls.refreshObjectPopover
 	
 	Renderer.Initialize
 	Opt.BackfaceCull = True : Opt.DrawFaces = True : Opt.DrawEdges = True : Opt.DrawVerts = False
@@ -152,14 +234,6 @@ Sub timer_Tick
 	Dim maxStepLook As Float = .05
 	Dim maxStepLook As Float = Scene.Camera.TurnSpeed
 	Scene.Camera.PanTilt(-xLook * maxStepLook, -yLook * maxStepLook)
-	
-	Dim xScale As Float = Controls.gJoyXScale
-	Dim yScale As Float = Controls.gJoyYScale
-	If Abs(xScale) < dead Then xScale = 0
-	If Abs(yScale) < dead Then yScale = 0
-	Dim maxStepScale As Float = .01 '0.005 to 0.02
-	Dim mesh As cMesh = Scene.Meshes.Get("Teddybear")
-	mesh.SetTRS(mesh.Position, mesh.Rotation, mesh.Scale + -yScale * maxStepScale)
 
 '	RenderRaster
 	Renderer.RenderRaster(cvs, pnl.Width, pnl.Height, Scene, Opt)
@@ -191,4 +265,10 @@ public Sub renderRaytraced
 	pnl.Invalidate
 	Log("ads")
 	
+End Sub
+
+public Sub DrawThisBitmap(bmp As Bitmap)
+	Dim rect As Rect : rect.Initialize(0, 0, 100%x, 100%y)
+	cvs.DrawBitmap(bmp, Null, rect)
+	pnl.Invalidate
 End Sub

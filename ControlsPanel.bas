@@ -25,6 +25,8 @@ Sub Class_Globals
 	Public gJoyYScale As Float ' -1..1 (up..down, screen coords)
 	
 	Dim popoverCamSettings As PopoverPanelView
+	Dim popoverRenderSettings As PopoverPanelView
+	Dim popoverObjectsSettings As PopoverPanelView
 	
 End Sub
 
@@ -43,25 +45,28 @@ Public Sub build
 	joystickLook.Initialize(Me, "JSLook")
 	joystickLook.AddToParent(panelmain, panelmain.Width - 166dip - BigSpaceing, panelmain.Height - 166dip - BigSpaceing, 166dip, 166dip)
 
-	popoverCamSettings.Initialize
-	popoverCamSettings.addToParent(panelmain)
-	
-	Dim sldCameraTurnSpeed As SliderView
-	sldCameraTurnSpeed.Initialize(Me, "sldCamTurnSpeed")
-	sldCameraTurnSpeed.AddToParent(popoverCamSettings.containerPanel.Panel, 0, 0, popoverCamSettings.containerPanel.Width, 10%y)
-	
-	Dim sldCameraMoveSpeed As SliderView
-	sldCameraMoveSpeed.Initialize(Me, "sldCamMoveSpeed")
-	sldCameraMoveSpeed.AddToParent(popoverCamSettings.containerPanel.Panel, 0, UI.Bottom(sldCameraTurnSpeed.panelmain), popoverCamSettings.containerPanel.Width, 10%y)
-	
-	Dim sldCameraFOV As SliderView
-	sldCameraFOV.Initialize(Me, "sldCamFov")
-	sldCameraFOV.AddToParent(popoverCamSettings.containerPanel.Panel, 0, UI.Bottom(sldCameraMoveSpeed.panelmain), popoverCamSettings.containerPanel.Width, 10%y)
-	
-	popoverCamSettings.containerPanel.Panel.Height = UI.Bottom(sldCameraFOV.panelmain)
-'	Dim slider As SliderView
-'	slider.Initialize(Me, "ads")
-'	slider.AddToParent(panelmain, 0, 0, 100%x, 100dip)
+	popoverCamSettings = CreatePopover("asd")
+	popoverCamSettings.Title = "Camera Settings"
+
+	Dim sldCameraTurnSpeed As SliderView = AddSliderToPopover(popoverCamSettings, "sldCamMoveSpeed")
+'	sldCameraMoveSpeed.SetValue(Main.Scene.Camera.TurnSpeed, False)
+	Dim sldCameraMoveSpeed As SliderView = AddSliderToPopover(popoverCamSettings, "sldCamMoveSpeed")
+'	sldCameraMoveSpeed.SetValue(Main.Scene.Camera.MoveSpeed, True)
+	Dim sldCameraFOV As SliderView = AddSliderToPopover(popoverCamSettings, "sldCamFov")
+'	sldCameraFOV.SetValue(Main.Scene.Camera.FOV_Deg.As(Float), True)
+
+	popoverObjectsSettings = CreatePopover("objectSettings")
+
+	'render settings
+'	popoverRenderSettings = CreatePopover("asd")
+'	popoverRenderSettings.Title = "Viewport Settings"
+'	Dim ToggleRenderMode As ButtonToggle
+'	ToggleRenderMode.Initialize(Me, "togRenderMode")
+'	ToggleRenderMode.AddButton("Wireframe", "OFF")
+'	ToggleRenderMode.AddButton("Solid", "ON")
+'	ToggleRenderMode.AddButton("Shaded", "OFF")
+'	ToggleRenderMode.AddToParent(popoverRenderSettings.containerPanel.Panel, 5%x, 2%y, 90%x, 5%y)
+'	popoverRenderSettings.containerPanel.Panel.Height = UI.Bottom(ToggleRenderMode.panelmain)
 
 	Dim btnCameraSettings As Button
 	btnCameraSettings.Initialize("CamSettings")
@@ -170,7 +175,9 @@ Sub sldCamFov_ValueChanged(m As Map)
 End Sub
 
 Sub RenderWire_Click
-	
+	If Not(popoverObjectsSettings.panelmain.Visible) Then
+		popoverObjectsSettings.ShowPanel
+	End If
 End Sub
 
 Sub RenderSolid_Click
@@ -180,4 +187,51 @@ End Sub
 Sub RenderShaded_Click
 	
 	CallSub(Main, "renderRaytraced")
+End Sub
+
+
+public Sub CreatePopover(event As String) As PopoverPanelView
+	Dim newPopover As PopoverPanelView
+	newPopover.Initialize
+	newPopover.addToParent(panelmain)
+	
+	Return newPopover
+End Sub
+
+public Sub AddSliderToPopover(popover As PopoverPanelView, event As String) As SliderView
+	
+	Dim newSlider As SliderView
+	newSlider.Initialize(Me, event)
+	
+	newSlider.AddToParent(popover.containerPanel.Panel, 0, popover.containerPanel.Panel.Height, 100%x, 10%y)
+	popover.containerPanel.Panel.Height = UI.Bottom(newSlider.panelmain)
+	
+	
+	Return newSlider
+End Sub
+
+public Sub AddModelBarToPopover(popover As PopoverPanelView, event As String) As ModelBar
+	Dim newModelbar As ModelBar
+	newModelbar.Initialize(Me, event)
+	newModelbar.AddToParent(popover.containerPanel.Panel, 0, popover.containerPanel.Panel.Height, 100%x)
+	popover.containerPanel.Panel.Height = UI.Bottom(newModelbar.panelmain)
+	
+	
+	Log(popover.containerPanel.Panel.Height)
+	Return newModelbar
+End Sub
+
+public Sub refreshObjectPopover
+	popoverObjectsSettings.containerPanel.Panel.RemoveAllViews
+	For Each obj As cModel In Main.Scene.Models
+		Dim model As ModelBar = AddModelBarToPopover(popoverObjectsSettings, "objSettings")
+		model.Title = obj.mesh.Name
+		model.Tag = obj
+	Next
+End Sub
+
+public Sub objSettings_VisibilityChanged(visible As Boolean)
+	Dim modelB As ModelBar = Sender
+	modelB.Tag.As(cModel).Visible = visible
+	CallSub(Main, "resetTimer")
 End Sub

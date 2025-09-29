@@ -55,7 +55,6 @@ public Sub addToParent(parent As Panel)
 	
 	handlePanel.Background = UI.GetDrawable(Colors.Black, handlePanel.Height)
 	namelabel.Gravity = Gravity.CENTER
-	namelabel.Text = "Camera Settings"
 	namelabel.TextSize = 20
 	namelabel.Typeface = Typeface.DEFAULT_BOLD
 	
@@ -131,5 +130,9 @@ public Sub bg_Touch (Action As Int, X As Float, Y As Float)
 	panelmain.Visible = False
 	backgroundPanel.Enabled = True
 	
+End Sub
+
+public Sub setTitle(str As String)
+	namelabel.Text = str
 End Sub
 	
