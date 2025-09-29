@@ -108,6 +108,16 @@ Public Sub build
 	btnRenderShaded.Typeface = Typeface.DEFAULT_BOLD
 	
 
+	Dim btnEnableSmoothShade As Button
+	btnEnableSmoothShade.Initialize("enableSmoothShade")
+	panelmain.AddView(btnEnableSmoothShade, UI.Right(btnRenderShaded) + 4dip, 4dip, 10%x, 10%x)
+	btnEnableSmoothShade.Background = UI.GetDrawable(Colors.White, btnEnableSmoothShade.Height)
+	btnEnableSmoothShade.Text = "M" ' todo make panel with button and label and camera icon
+	btnEnableSmoothShade.Padding = Array As Int(0, 0, 0, 0)
+	btnEnableSmoothShade.TextSize = 30
+	btnEnableSmoothShade.Typeface = Typeface.DEFAULT_BOLD
+	
+
 
 	
 '	dim focusCameraAtSomething ??
@@ -193,6 +203,14 @@ Sub RenderShaded_Click
 End Sub
 
 
+Sub enableSmoothShade_Click
+	Main.Opt.SmoothShading = Not(Main.Opt.SmoothShading)
+	CallSub(Main, "resetTimer")
+	
+'	CallSub(Main, "renderRaytraced")
+End Sub
+
+
 public Sub CreatePopover(event As String) As PopoverPanelView
 	Dim newPopover As PopoverPanelView
 	newPopover.Initialize
@@ -219,8 +237,6 @@ public Sub AddModelBarToPopover(popover As PopoverPanelView, event As String) As
 	newModelbar.AddToParent(popover.containerPanel.Panel, 0, popover.containerPanel.Panel.Height, 100%x)
 	popover.containerPanel.Panel.Height = UI.Bottom(newModelbar.panelmain)
 	
-	
-	Log(popover.containerPanel.Panel.Height)
 	Return newModelbar
 End Sub
 

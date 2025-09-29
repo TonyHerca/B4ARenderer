@@ -62,6 +62,7 @@ Sub Process_Globals
 
 	Dim Renderer As cRenderer
 	Dim Scene As cScene
+	Dim Opt As RenderOptions
 End Sub
 
 Sub Globals
@@ -72,7 +73,6 @@ Sub Globals
 	Dim Controls As ControlsPanel
 	
 	
-	Dim Opt As RenderOptions
 
 	
 	Public remFrames As Int = 1
@@ -167,7 +167,7 @@ Sub Activity_Create(FirstTime As Boolean)
 	
 	Dim meshsphere As cMesh
 	meshsphere.Initialize("sphere")
-	meshsphere.BuildUVSphere(1, 10, 10, 1)
+	meshsphere.BuildUVSphere(1, 20, 20, 1)
 	Dim mdlsphere As cModel
 	mdlsphere.Initialize("spheremodel", meshsphere, materialRed)
 	Scene.AddModel(mdlsphere)
@@ -185,7 +185,7 @@ Sub Activity_Create(FirstTime As Boolean)
 	Controls.refreshObjectPopover
 	
 	Renderer.Initialize
-	Opt.BackfaceCull = True : Opt.DrawFaces = True : Opt.DrawEdges = True : Opt.DrawVerts = False
+	Opt.BackfaceCull = True : Opt.DrawFaces = True : Opt.DrawEdges = True : Opt.DrawVerts = False : Opt.SmoothShading = False	
 	
 
 	cvs.Initialize(pnl)

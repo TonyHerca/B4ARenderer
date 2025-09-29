@@ -25,7 +25,7 @@ Sub Class_Globals
 End Sub
 
 Public Sub Initialize(n As String, мMesh As cMesh, mat As cMaterial)
-	Name = n : Mesh = мMesh : Material = mat : matid = mat.id
+	Name = n : Mesh = мMesh : Material = mat : MatId = mat.id
 End Sub
 
 Public Sub SetTRS(pos As Vec3, rot As Vec3, s As Double)
@@ -49,6 +49,27 @@ Public Sub WorldFaceNormals As List
 	Dim out As List : out.Initialize
 	For i = 0 To Mesh.FaceN.Size - 1
 		Dim n As Vec3 = Mesh.FaceN.Get(i)
+		Dim nr As Vec3 = Math3D.ApplyYawPitchRoll(n, Rotation.X, Rotation.Y, Rotation.Z)
+		out.Add(Math3D.Normalize(nr))
+	Next
+	
+	Return out
+End Sub
+
+Public Sub WorldVertNormals As List
+	Dim out As List : out.Initialize
+	For i = 0 To Mesh.VertN.Size - 1
+		Dim n As Vec3 = Mesh.VertN.Get(i)
+		Dim nr As Vec3 = Math3D.ApplyYawPitchRoll(n, Rotation.X, Rotation.Y, Rotation.Z)
+		out.Add(Math3D.Normalize(nr))
+	Next
+	Return out
+End Sub
+
+Public Sub WorldCornerNormals As List
+	Dim out As List : out.Initialize
+	For i = 0 To Mesh.CornerN.Size - 1
+		Dim n As Vec3 = Mesh.CornerN.Get(i)
 		Dim nr As Vec3 = Math3D.ApplyYawPitchRoll(n, Rotation.X, Rotation.Y, Rotation.Z)
 		out.Add(Math3D.Normalize(nr))
 	Next

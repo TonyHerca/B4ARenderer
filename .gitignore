@@ -27,3 +27,7 @@ AutoBackups/Backup SBoxB4A 2025-09-29 16.49.zip
 /AutoBackups
 /AutoBackups
 AutoBackups/Backup SBoxB4A 2025-09-28 11.38.zip
+*.meta
+SBoxB4A.b4a.meta
+SBoxB4A.b4a.meta
+*.meta

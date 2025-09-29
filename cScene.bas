@@ -6,8 +6,8 @@ Version=13.4
 @EndOfDesignText@
 ' cScene.bas
 Sub Class_Globals
-	Type SceneFrame(Verts As List, Faces As List, FaceN As List, FaceMat As List)
-	
+	Type SceneFrame(Verts As List, Faces As List, FaceN As List, FaceMat As List, VertsN As List, CornerN As List)
+
 	Public Camera As cCamera
 	Public Lights As List        ' List(cLight)
 	Public Materials As List     ' List(cMaterial)
@@ -74,27 +74,31 @@ End Sub
 Public Sub BuildFrame As SceneFrame
 	Dim fr As SceneFrame
 	fr.Initialize
-	fr.Verts.Initialize : fr.Faces.Initialize : fr.FaceN.Initialize : fr.FaceMat.Initialize
-	
+	fr.Verts.Initialize : fr.Faces.Initialize : fr.FaceN.Initialize : fr.FaceMat.Initialize : fr.VertsN.Initialize : fr.CornerN.Initialize
 	For Each m As cModel In Models
 		If m.Visible = False Then Continue
+		m.Mesh.ComputeCornerNormalsSeamAware(m.Mesh.creaseDegs, 1e-6)
 		
 		Dim base As Int = fr.Verts.Size
 		Dim wv As List = m.WorldVerts
 		Dim nrm As List = m.WorldFaceNormals
-		
+		Dim wn As List = m.WorldVertNormals
+		Dim wcn As List = m.WorldCornerNormals
 		' (optional) auto-lift above floor by mesh bounds if you want:
 		' Dim liftY As Double = -m.Mesh.MinY + LiftAboveFloor
 		' ... then add lift to each wv point ...
-
 		For i = 0 To wv.Size - 1
 			fr.Verts.Add(wv.Get(i))
+			fr.VertsN.Add(wn.Get(i))
 		Next
 		For i = 0 To m.Mesh.Faces.Size - 1
 			Dim f As Face = m.Mesh.Faces.Get(i)
 			fr.Faces.Add(Math3D.F3(base+f.A, base+f.B, base+f.C))
 			fr.FaceN.Add(nrm.Get(i))
 			fr.FaceMat.Add(m.MatId)     ' single material per model (simple case)
+		Next
+		For i = 0 To wcn.Size - 1
+			fr.CornerN.Add(wcn.Get(i))
 		Next
 	Next
 

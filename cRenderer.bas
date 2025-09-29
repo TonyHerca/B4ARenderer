@@ -6,7 +6,7 @@ Version=13.4
 @EndOfDesignText@
 ' cRenderer.bas
 Sub Class_Globals
-	Type RenderOptions(BackfaceCull As Boolean, DrawFaces As Boolean, DrawEdges As Boolean, DrawVerts As Boolean)
+	Type RenderOptions(BackfaceCull As Boolean, DrawFaces As Boolean, DrawEdges As Boolean, DrawVerts As Boolean, SmoothShading As Boolean)
 	Type RenderStats(TotalFaces As Int, CulledFaces As Int, DrawnFaces As Int, BuildMs As Int, RenderMs As Int)
 	Type Ray(Origin As Vec3, Dir As Vec3)
 	Type Hit(T As Double, FaceIndex As Int, U As Double, V As Double)
@@ -16,11 +16,12 @@ Sub Class_Globals
 	Public Const MODE_RAYTRACE As Int = 1
 	Public RENDER_MODE As Int = 0
 	
+	
 	Private RT_W As Int, RT_H As Int
 	Private Pixels() As Int
 	Private MT_Pending As Int
 	
-	Private RT_Verts As List, RT_Faces As List, RT_FaceN As List, RT_Refl As List
+	Private RT_Verts As List, RT_Faces As List, RT_FaceN As List, RT_Refl As List, RT_VertN As List, RT_CornerN As List
 	Private RT_AlbR As List, RT_AlbG As List, RT_AlbB As List
 	
 	Private RT_CamPos As Vec3
@@ -43,6 +44,7 @@ Sub Class_Globals
 	Public LastStats As RenderStats
 	
 	Dim testTimer As Timer
+	Dim backgroundColor As Int = Colors.black
 	
 End Sub
 
@@ -62,7 +64,7 @@ Public Sub RenderRaster(cvs As Canvas, dstW As Int, dstH As Int, scene As cScene
 	Dim stats As RenderStats
 	stats.TotalFaces = nF
 
-	cvs.DrawColor(Colors.Black)
+	cvs.DrawColor(backgroundColor)
 
 	' (You commented the early exit; leaving it as you had it)
 	If nV = 0 Or nF = 0 Then
@@ -84,13 +86,13 @@ Public Sub RenderRaster(cvs As Canvas, dstW As Int, dstH As Int, scene As cScene
 	For i = 0 To nV - 1
 		Dim w As Vec3 = FR.Verts.Get(i)
 		Dim rel As Vec3 = Math3D.V3(w.X - scene.Camera.Pos.X, w.Y - scene.Camera.Pos.Y, w.Z - scene.Camera.Pos.Z)
-		Dim cx As Double = Math3D.Dot(rel, right)
-		Dim cy As Double = Math3D.Dot(rel, upv)
+		Dim cxx As Double = Math3D.Dot(rel, right)
+		Dim cyy As Double = Math3D.Dot(rel, upv)
 		Dim cz As Double = Math3D.Dot(rel, fwd)
 		proj(i*3+2) = cz
 		If cz >= NearZ And cz <= FarZ Then
-			Dim ndcX As Double = (cx * f / aspect) / cz
-			Dim ndcY As Double = (cy * f) / cz
+			Dim ndcX As Double = (cxx * f / aspect) / cz
+			Dim ndcY As Double = (cyy * f) / cz
 			proj(i*3+0) = (ndcX * 0.5 + 0.5) * dstW
 			proj(i*3+1) = (-ndcY * 0.5 + 0.5) * dstH
 		Else
@@ -112,83 +114,127 @@ Public Sub RenderRaster(cvs As Canvas, dstW As Int, dstH As Int, scene As cScene
 	Next
 	sorter.SortType("Z", False) ' far → near
 	
+	Dim useSmooth As Boolean = opt.SmoothShading
+
+	Dim pix() As Int, bmp As Bitmap, jbmp As JavaObject
+	If useSmooth Then
+		pix = Math3D.CreateIntArray(dstW * dstH)
+		' clear to black (or whatever bg)
+		For ii = 0 To pix.Length - 1
+			pix(ii) = Colors.Black
+		Next
+	End If
+
+	' choose light
+	Dim lightDir As Vec3
+	If scene.Lights.Size > 0 Then
+		Dim L As cLight = scene.Lights.Get(0)
+		lightDir = L.Direction
+	Else
+		lightDir = Math3D.V3(-1,-1,-1)
+	End If
+	Dim Lm As Vec3 = Math3D.Normalize(Math3D.Mul(lightDir, -1))   ' surface->light
+
+	
 	' draw
 	Dim culled As Int, drawn As Int
 	For si = 0 To sorter.Size - 1
 		Dim fd As FaceDepth = sorter.Get(si)
 		Dim fi As Int = fd.I
 		Dim fce As Face = FR.Faces.Get(fi)
-		
+
 		Dim za As Double = proj(fce.A*3+2), zb As Double = proj(fce.B*3+2), zc As Double = proj(fce.C*3+2)
-		
-		If za < NearZ Or zb < NearZ Or zc < NearZ Then
-			Continue
-		End If
-		If za > FarZ Or zb > FarZ Or zc > FarZ Then 
-			Continue
-		End If
-	
+		If za < NearZ Or zb < NearZ Or zc < NearZ Then Continue
+		If za > FarZ Or zb > FarZ Or zc > FarZ Then Continue
+
 		Dim ax As Float = proj(fce.A*3+0), ay As Float = proj(fce.A*3+1)
 		Dim bx As Float = proj(fce.B*3+0), by As Float = proj(fce.B*3+1)
-		Dim cxx As Float = proj(fce.C*3+0), cyy As Float = proj(fce.C*3+1)
+		Dim cx As Float = proj(fce.C*3+0), cy As Float = proj(fce.C*3+1)
 
-		' backface culling in world space
+		' backface cull (world space)
 		Dim nWorld As Vec3 = FR.FaceN.Get(fi)
-		Dim wa As Vec3 = FR.Verts.Get(fce.A)
-		Dim wb As Vec3 = FR.Verts.Get(fce.B)
-		Dim wc As Vec3 = FR.Verts.Get(fce.C)
+		Dim wa As Vec3 = FR.Verts.Get(fce.A), wb As Vec3 = FR.Verts.Get(fce.B), wc As Vec3 = FR.Verts.Get(fce.C)
 		Dim center As Vec3 = Math3D.V3((wa.X+wb.X+wc.X)/3, (wa.Y+wb.Y+wc.Y)/3, (wa.Z+wb.Z+wc.Z)/3)
 		Dim viewDir As Vec3 = Math3D.Normalize(Math3D.SubV(center, scene.Camera.Pos))
-		If opt.BackfaceCull And Math3D.Dot(nWorld, viewDir) >= 0 Then
-			culled = culled + 1
+		If opt.BackfaceCull And Math3D.Dot(nWorld, viewDir) >= 0 Then 
+			culled = culled + 1  
 			Continue
 		End If
-
-		' lambert with first directional light if present
-		Dim lightDir As Vec3
-		If scene.Lights.Size > 0 Then
-			Dim L As cLight = scene.Lights.Get(0)
-			lightDir = L.Direction
-		Else
-			lightDir = Math3D.V3(-1, -1, -1)
-		End If
-		Dim intensity As Double = Max(0, Math3D.Dot(nWorld, Math3D.Mul(lightDir, -1)))
-
-		' face color from material
-		Dim MatIdx As Int = FR.FaceMat.Get(fi)
+		' material albedo
 		Dim baseCol As Int = Colors.RGB(60,160,255)
-		If MatIdx >= 0 And MatIdx < scene.Materials.Size Then
-			Dim M As cMaterial = scene.Materials.Get(MatIdx)
-			baseCol = M.Albedo
-		End If
-		Dim br As Int = Bit.And(Bit.ShiftRight(baseCol,16), 255)
-		Dim bg As Int = Bit.And(Bit.ShiftRight(baseCol,8), 255)
-		Dim bb As Int = Bit.And(baseCol,255)
-		Dim k As Double = 0.2 + 0.8 * intensity
-		Dim fillCol As Int = Colors.RGB(Min(255, br*k), Min(255, bg*k), Min(255, bb*k))
+		Dim mi As Int = FR.FaceMat.Get(fi)
+		If mi >= 0 And mi < scene.Materials.Size Then baseCol = scene.Materials.Get(mi).As(cMaterial).Albedo
+		Dim ar As Double = Bit.And(Bit.ShiftRight(baseCol,16),255)/255.0
+		Dim ag As Double = Bit.And(Bit.ShiftRight(baseCol, 8),255)/255.0
+		Dim ab As Double = Bit.And(baseCol, 255)/255.0
 
-		Dim p As Path
-		p.Initialize(ax, ay)
-		p.LineTo(bx, by)
-		p.LineTo(cxx, cyy)
-		' (no p.Close on purpose – you removed it)
+		If useSmooth Then
+			' ----- GOURAUD: per-vertex color -> interpolate -----
+			' material albedo
+			Dim baseCol As Int = Colors.RGB(60,160,255)
+			Dim mi As Int = FR.FaceMat.Get(fi)
+			If mi >= 0 And mi < scene.Materials.Size Then baseCol = scene.Materials.Get(mi).As(cMaterial).Albedo
+			Dim ar As Double = Bit.And(Bit.ShiftRight(baseCol,16),255)/255.0
+			Dim ag As Double = Bit.And(Bit.ShiftRight(baseCol,8),255)/255.0
+			Dim ab As Double = Bit.And(baseCol,255)/255.0
 
-		If opt.DrawFaces Then cvs.DrawPath(p, fillCol, True, 0)
-		If opt.DrawEdges Then
-			Dim edgeColor As Int = Colors.ARGB(220, 40, 40, 40)
-			cvs.DrawLine(ax, ay, bx, by, edgeColor, 2)
-			cvs.DrawLine(bx, by, cxx, cyy, edgeColor, 2)
-			cvs.DrawLine(cxx, cyy, ax, ay, edgeColor, 2)
+			' light (normalize once outside loop)
+			' Dim Lm As Vec3 = Normalize(Mul(lightDir, -1))
+
+			Dim idx As Int = fi * 3
+			Dim aN As Vec3 = FR.CornerN.Get(idx + 0)
+			Dim bN As Vec3 = FR.CornerN.Get(idx + 1)
+			Dim cN As Vec3 = FR.CornerN.Get(idx + 2)
+			Dim kAmb As Double = 0.1
+
+			Dim lamA As Double = Max(0, Math3D.Dot(aN, Lm))
+			Dim lamB As Double = Max(0, Math3D.Dot(bN, Lm))
+			Dim lamC As Double = Max(0, Math3D.Dot(cN, Lm))
+			Dim rA As Double = ar*(kAmb + (1-kAmb)*lamA), gA As Double = ag*(kAmb + (1-kAmb)*lamA), bA As Double = ab*(kAmb + (1-kAmb)*lamA)
+			Dim rB As Double = ar*(kAmb + (1-kAmb)*lamB), gB As Double = ag*(kAmb + (1-kAmb)*lamB), bB As Double = ab*(kAmb + (1-kAmb)*lamB)
+			Dim rC As Double = ar*(kAmb + (1-kAmb)*lamC), gC As Double = ag*(kAmb + (1-kAmb)*lamC), bC As Double = ab*(kAmb + (1-kAmb)*lamC)
+
+			FillTriGouraud(pix, dstW, dstH, ax, ay, bx, by, cx, cy, rA,gA,bA, rB,gB,bB, rC,gC,bC)
+			drawn = drawn + 1
+
+		Else
+			' ----- your existing flat draw -----
+			Dim intensity As Double = Max(0, Math3D.Dot(nWorld, Lm))
+			Dim k As Double = 0.2 + 0.8 * intensity
+			Dim fillCol As Int = Colors.RGB(Min(255, ar*255*k), Min(255, ag*255*k), Min(255, ab*255*k))
+
+			Dim p As Path
+			p.Initialize(ax, ay)
+			p.LineTo(bx, by)
+			p.LineTo(cx, cy)
+			If opt.DrawFaces Then cvs.DrawPath(p, fillCol, True, 0)
+			If opt.DrawEdges Then
+				Dim edgeColor As Int = Colors.ARGB(220, 40, 40, 40)
+				cvs.DrawLine(ax, ay, bx, by, edgeColor, 2)
+				cvs.DrawLine(bx, by, cx, cy, edgeColor, 2)
+				cvs.DrawLine(cx, cy, ax, ay, edgeColor, 2)
+			End If
+			If opt.DrawVerts Then
+				Dim vc As Int = Colors.Yellow
+				cvs.DrawCircle(ax, ay, 3dip, vc, True, 0)
+				cvs.DrawCircle(bx, by, 3dip, vc, True, 0)
+				cvs.DrawCircle(cx, cy, 3dip, vc, True, 0)
+			End If
+			
+			drawn = drawn + 1
 		End If
-		If opt.DrawVerts Then
-			Dim vc As Int = Colors.Yellow
-			cvs.DrawCircle(ax, ay, 3dip, vc, True, 0)
-			cvs.DrawCircle(bx, by, 3dip, vc, True, 0)
-			cvs.DrawCircle(cxx, cyy, 3dip, vc, True, 0)
-		End If
-		drawn = drawn + 1
 	Next
+	
+	If useSmooth Then
+		Dim bmp As Bitmap
+		bmp.InitializeMutable(dstW, dstH)
+		Dim jbmp As JavaObject = bmp
+		jbmp.RunMethod("setPixels", Array As Object(pix, 0, dstW, 0, 0, dstW, dstH))
 
+		Dim dst As Rect : dst.Initialize(0, 0, dstW, dstH)
+		cvs.DrawBitmap(bmp, Null, dst)
+	End If
+	
 	stats.CulledFaces = culled
 	stats.DrawnFaces = drawn
 
@@ -218,6 +264,8 @@ Public Sub RenderRaytrace(scene As cScene, Width As Int, Height As Int) As Resum
 	RT_Verts = fr.Verts
 	RT_Faces = fr.Faces
 	RT_FaceN = fr.FaceN
+	RT_VertN = fr.VertsN
+	RT_CornerN = fr.CornerN
 
 	' per-face reflectivity from materials
 	RT_Refl.Initialize
@@ -473,6 +521,8 @@ Private Sub IntersectTriangle(r As Ray, a As Vec3, b As Vec3, c As Vec3, best As
 	Dim t As Double = (e2x*qx + e2y*qy + e2z*qz) * invDet
 	If t > 1e-6 And t < best.T Then
 		best.T = t
+		best.U = u
+		best.V = v
 		Return True
 	End If
 	Return False
@@ -525,8 +575,9 @@ End Sub
 
 Private Sub Background(d As Vec3) As Vec3
 	' simple sky gradient
-	Dim t As Double = (d.Y + 1) * 0.5
-	Return Math3D.V3(0.05*(1-t)+0.5*t, 0.05*(1-t)+0.7*t, 0.08*(1-t)+1.0*t)
+'	Dim t As Double = (d.Y + 1) * 0.5
+'	Return Math3D.V3(0.05*(1-t)+0.5*t, 0.05*(1-t)+0.7*t, 0.08*(1-t)+1.0*t)
+	Return Math3D.V3(0, 0, 0)
 End Sub
 
 Private Sub TraceColor(r As Ray, depth As Int, v As List, f As List, fn As List, refl As List) As Vec3
@@ -537,7 +588,15 @@ Private Sub TraceColor(r As Ray, depth As Int, v As List, f As List, fn As List,
 
 	' hit point + face normal (flip to oppose the view ray)
 	Dim p As Vec3 = Math3D.AddV(r.Origin, Math3D.Mul(r.Dir, h.T))
-	Dim n As Vec3 = Math3D.Normalize(fn.Get(h.FaceIndex))
+	
+	Dim idx As Int = h.FaceIndex * 3
+	Dim aN As Vec3 = RT_CornerN.Get(idx + 0)
+	Dim bN As Vec3 = RT_CornerN.Get(idx + 1)
+	Dim cN As Vec3 = RT_CornerN.Get(idx + 2)
+	
+	Dim w As Double = 1 - h.U - h.V
+	Dim n As Vec3 = Math3D.Normalize( _
+    Math3D.AddV( Math3D.AddV(Math3D.Mul(aN, w), Math3D.Mul(bN, h.U)), Math3D.Mul(cN, h.V)))
 	If Math3D.Dot(n, r.Dir) > 0 Then n = Math3D.Mul(n, -1)
 
 	' direct light with hard shadow
@@ -584,3 +643,52 @@ End Sub
 '	Return Math3D.ARGB255(255, r*255, g*255, b*255)
 'End Sub
 
+Private Sub FillTriGouraud(pix() As Int, W As Int, H As Int, _
+    ax As Float, ay As Float, bx As Float, by As Float, cx As Float, cy As Float, _
+    rA As Double, gA As Double, bA As Double, rB As Double, gB As Double, bB As Double, rC As Double, gC As Double, bC As Double)
+
+	Dim minx As Int = Floor(Min(ax, Min(bx, cx)))
+	Dim maxx As Int = Ceil(Max(ax, Max(bx, cx)))
+	Dim miny As Int = Floor(Min(ay, Min(by, cy)))
+	Dim maxy As Int = Ceil(Max(ay, Max(by, cy)))
+	If maxx < 0 Or maxy < 0 Or minx >= W Or miny >= H Then Return
+	If minx < 0 Then minx = 0
+	If miny < 0 Then miny = 0
+	If maxx >= W Then maxx = W-1
+	If maxy >= H Then maxy = H-1
+
+	' Edge functions
+	Dim A01 As Float = ay - by,  B01 As Float = bx - ax,  C01 As Float = ax*by - bx*ay
+	Dim A12 As Float = by - cy,  B12 As Float = cx - bx,  C12 As Float = bx*cy - cx*by
+	Dim A20 As Float = cy - ay,  B20 As Float = ax - cx,  C20 As Float = cx*ay - ax*cy
+
+	Dim area As Float = (bx - ax)*(cy - ay) - (by - ay)*(cx - ax)
+	If Abs(area) < 1e-6 Then Return
+	Dim invArea As Double = 1.0 / area
+
+	For y = miny To maxy
+		Dim yc As Float = y + 0.5
+		Dim w0 As Float = A12 * (minx + 0.5) + B12 * yc + C12
+		Dim w1 As Float = A20 * (minx + 0.5) + B20 * yc + C20
+		Dim w2 As Float = A01 * (minx + 0.5) + B01 * yc + C01
+		Dim dw0dx As Float = A12, dw1dx As Float = A20, dw2dx As Float = A01
+
+		Dim o As Int = y * W + minx
+		For x = minx To maxx
+			Dim inside As Boolean = (area > 0 And w0 >= 0 And w1 >= 0 And w2 >= 0) Or (area < 0 And w0 <= 0 And w1 <= 0 And w2 <= 0)
+			If inside Then
+				' barycentrics
+				Dim l0 As Double = w0 * invArea
+				Dim l1 As Double = w1 * invArea
+				Dim l2 As Double = 1.0 - l0 - l1
+				' interpolate color
+				Dim r As Int = Min(255, (rA*l0 + rB*l1 + rC*l2) * 255)
+				Dim g As Int = Min(255, (gA*l0 + gB*l1 + gC*l2) * 255)
+				Dim b As Int = Min(255, (bA*l0 + bB*l1 + bC*l2) * 255)
+				pix(o) = Math3D.ARGB255(255, r, g, b)
+			End If
+			w0 = w0 + dw0dx : w1 = w1 + dw1dx : w2 = w2 + dw2dx
+			o = o + 1
+		Next
+	Next
+End Sub

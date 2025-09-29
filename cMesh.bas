@@ -15,19 +15,23 @@ Sub Class_Globals
 	Public Faces As List     ' List(Math3D.Face)
 	Public FaceN As List     ' List(Math3D.Vec3)
 	Public FaceMat As List   ' List(Int) material index per face
-
+	Public VertN As List
+	Public CornerN As List
+	
 	' Transform
 	Public Position As Vec3
 	Public Rotation As Vec3  ' yaw (Y), pitch (X), roll (Z) in radians
 	Public Scale As Double
-
+	
+	Public creaseDegs As Int = 60
+	
 	' Bounds
 	Public MinY As Double, MaxY As Double
 End Sub
 
 Public Sub Initialize(n As String)
 	Name = n
-	Verts.Initialize : Faces.Initialize : FaceN.Initialize : FaceMat.Initialize
+	Verts.Initialize : Faces.Initialize : FaceN.Initialize : FaceMat.Initialize : VertN.Initialize : CornerN.Initialize
 	Position = Math3D.V3(0,0,0)
 	Rotation = Math3D.V3(0,0,0)
 	Scale = 1
@@ -71,6 +75,8 @@ Public Sub LoadOBJFromAssets(FileName As String, MaterialIndex As Int)
 	Loop
 	tr.Close
 	RecalcFaceNormals
+	RecalcVertexNormals
+	ComputeCornerNormalsSeamAware(60, 1e-6)
 	UpdateYBounds
 End Sub
 
@@ -90,10 +96,12 @@ Public Sub AddCube(size As Double, MaterialIndex As Int)
 		FaceMat.Add(MaterialIndex)
 	Next
 	RecalcFaceNormals
+	RecalcVertexNormals
+	ComputeCornerNormalsSeamAware(60, 1e-6)
 	UpdateYBounds
 End Sub
 
-Public Sub RecalcFaceNormals
+	Public Sub RecalcFaceNormals
 	FaceN.Clear
 	For i = 0 To Faces.Size - 1
 		Dim f As Face = Faces.Get(i)
@@ -102,6 +110,29 @@ Public Sub RecalcFaceNormals
 		Dim c As Vec3 = Verts.Get(f.C)
 		Dim n As Vec3 = Math3D.Normalize(Math3D.Cross(Math3D.SubV(b,a), Math3D.SubV(c,a)))
 		FaceN.Add(n)
+	Next
+End Sub
+
+Public Sub RecalcVertexNormals
+	VertN.Clear
+	For i = 0 To Verts.Size - 1
+		VertN.Add(Math3D.V3(0,0,0))
+	Next
+	For i = 0 To Faces.Size - 1
+		Dim f As Face = Faces.Get(i)
+		Dim a As Vec3 = Verts.Get(f.A)
+		Dim b As Vec3 = Verts.Get(f.B)
+		Dim c As Vec3 = Verts.Get(f.C)
+		Dim e1 As Vec3 = Math3D.SubV(b, a)
+		Dim e2 As Vec3 = Math3D.SubV(c, a)
+		Dim n  As Vec3 = Math3D.Cross(e1, e2)   ' not normalized = 2*area * unitNormal
+		' accumulate
+		VertN.Set(f.A, Math3D.AddV(VertN.Get(f.A), n))
+		VertN.Set(f.B, Math3D.AddV(VertN.Get(f.B), n))
+		VertN.Set(f.C, Math3D.AddV(VertN.Get(f.C), n))
+	Next
+	For i = 0 To VertN.Size - 1
+		VertN.Set(i, Math3D.Normalize(VertN.Get(i)))
 	Next
 End Sub
 
@@ -229,6 +260,8 @@ Public Sub BuildPlaneXZ(width As Double, depth As Double, y As Double, segX As I
 	Next
 
 	RecalcFaceNormals
+	RecalcVertexNormals
+	ComputeCornerNormalsSeamAware(60, 1e-6)
 	UpdateYBounds
 End Sub
 
@@ -261,6 +294,8 @@ Public Sub BuildPlaneXY(width As Double, height As Double, z As Double, segX As 
 	Next
 
 	RecalcFaceNormals
+	RecalcVertexNormals
+	ComputeCornerNormalsSeamAware(60, 1e-6)
 	UpdateYBounds
 End Sub
 
@@ -293,6 +328,8 @@ Public Sub BuildPlaneYZ(height As Double, depth As Double, x As Double, segY As 
 	Next
 
 	RecalcFaceNormals
+	RecalcVertexNormals
+	ComputeCornerNormalsSeamAware(60, 1e-6)
 	UpdateYBounds
 End Sub
 
@@ -325,6 +362,8 @@ Public Sub BuildCube(size As Double, matIdx As Int)
 	AddTriIdx(v0,v3,v7, matIdx) : AddTriIdx(v0,v7,v4, matIdx)
 	
 	RecalcFaceNormals
+	RecalcVertexNormals
+	ComputeCornerNormalsSeamAware(60, 1e-6)
 	UpdateYBounds
 End Sub
 
@@ -363,6 +402,8 @@ Public Sub BuildUVSphere(radius As Double, seg As Int, rings As Int, matIdx As I
 	Next
 
 	RecalcFaceNormals
+	RecalcVertexNormals
+	ComputeCornerNormalsSeamAware(60, 1e-6)
 	UpdateYBounds
 End Sub
 
@@ -419,6 +460,8 @@ Public Sub BuildCylinder(radius As Double, height As Double, seg As Int, capTop 
 	End If
 
 	RecalcFaceNormals
+	RecalcVertexNormals
+	ComputeCornerNormalsSeamAware(60, 1e-6)
 	UpdateYBounds
 End Sub
 
@@ -458,5 +501,103 @@ Public Sub BuildCone(radius As Double, height As Double, seg As Int, capBase As 
 	End If
 
 	RecalcFaceNormals
+	RecalcVertexNormals
+	ComputeCornerNormalsSeamAware(60, 1e-6)
 	UpdateYBounds
+End Sub
+
+' Build per-corner normals using a crease angle (degrees).
+' Faces meeting at a vertex are averaged only if angle(face_i, face_j) <= creaseDeg.
+Public Sub ComputeCornerNormalsSeamAware(creaseDeg As Double, weldEps As Double)
+	If FaceN.Size <> Faces.Size Then RecalcFaceNormals
+
+	CornerN.Clear
+	Dim V As Int = Verts.Size, Ff As Int = Faces.Size
+	If V = 0 Or Ff = 0 Then Return
+
+	Dim cosT As Double = Cos(creaseDeg * cPI / 180)
+
+	' 1) For each vertex index, collect incident faces
+	Dim facesAtVert As List : facesAtVert.Initialize
+	For vi = 0 To V - 1
+		Dim lst As List : lst.Initialize
+		facesAtVert.Add(lst)
+	Next
+	For fi = 0 To Ff - 1
+		Dim f As Face = Faces.Get(fi)
+		Dim la As List = facesAtVert.Get(f.A) : la.Add(fi) : facesAtVert.Set(f.A, la)
+		Dim lb As List = facesAtVert.Get(f.B) : lb.Add(fi) : facesAtVert.Set(f.B, lb)
+		Dim lc As List = facesAtVert.Get(f.C) : lc.Add(fi) : facesAtVert.Set(f.C, lc)
+	Next
+	
+	' 2) Area weights (optional but improves quality)
+	Dim faceW As List : faceW.Initialize
+	For fi = 0 To Ff - 1
+		Dim f As Face = Faces.Get(fi)
+		Dim a As Vec3 = Verts.Get(f.A)
+		Dim b As Vec3 = Verts.Get(f.B)
+		Dim c As Vec3 = Verts.Get(f.C)
+		Dim w As Double = Math3D.Len(Math3D.Cross(Math3D.SubV(b,a), Math3D.SubV(c,a)))
+		faceW.Add(w)
+	Next
+	
+	' 3) Group vertex indices by 3D position (quantized by weldEps)
+	Dim groups As Map : groups.Initialize    ' key -> List(of Int vertex indices)
+	For vi = 0 To V - 1
+		Dim p As Vec3 = Verts.Get(vi)
+		Dim key As String = PosKey(p, weldEps)
+		If groups.ContainsKey(key) = False Then
+			Dim nl As List : nl.Initialize
+			groups.Put(key, nl)
+		End If
+		Dim gl As List = groups.Get(key)
+		gl.Add(vi)
+		groups.Put(key, gl)
+	Next
+	
+	' 4) For each face corner, average only faces at the *same position group*
+	For fi = 0 To Ff - 1
+		Dim f As Face = Faces.Get(fi)
+		Dim nfi As Vec3 = FaceN.Get(fi)
+		
+		' A corner
+		CornerN.Add( CornerNormalAtCorner(f.A, fi, nfi, facesAtVert, faceW, groups, weldEps, cosT) )
+		' B corner
+		CornerN.Add( CornerNormalAtCorner(f.B, fi, nfi, facesAtVert, faceW, groups, weldEps, cosT) )
+		' C corner
+		CornerN.Add( CornerNormalAtCorner(f.C, fi, nfi, facesAtVert, faceW, groups, weldEps, cosT) )
+	Next
+End Sub
+
+Private Sub CornerNormalAtCorner(vi As Int, fi As Int, nfi As Vec3, _
+                                 facesAtVert As List, faceW As List, groups As Map, weldEps As Double, cosT As Double) As Vec3
+	Dim sum As Vec3 = Math3D.V3(0,0,0)
+
+	' find the group (all vertex indices at the same 3D position)
+	Dim p As Vec3 = Verts.Get(vi)
+	Dim key As String = PosKey(p, weldEps)
+	Dim samePos As List = groups.Get(key)
+
+	' collect faces touching any vertex in the same-position group
+	For Each vj As Int In samePos
+		Dim lst As List = facesAtVert.Get(vj)
+		For Each fj As Int In lst
+			Dim nfj As Vec3 = FaceN.Get(fj)
+			If Math3D.Dot(nfi, nfj) >= cosT Then
+				sum = Math3D.AddV(sum, Math3D.Mul(nfj, faceW.Get(fj)))
+			End If
+		Next
+	Next
+
+	If Math3D.Len(sum) < 1e-9 Then Return nfi
+	Return Math3D.Normalize(sum)
+End Sub
+
+' Quantize position to a grid cell (epsilon) to build stable map keys
+Private Sub PosKey(p As Vec3, eps As Double) As String
+	If eps <= 0 Then eps = 1e-6
+	Dim qx As Long = Floor(p.X/eps + 0.5)
+	Dim qy As Long = Floor(p.Y/eps + 0.5)
+	Dim qz As Long = Floor(p.Z/eps + 0.5)
+	Return qx & "|" & qy & "|" & qz
 End Sub
