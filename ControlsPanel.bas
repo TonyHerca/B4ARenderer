@@ -117,6 +117,16 @@ Public Sub build
 	btnEnableSmoothShade.TextSize = 30
 	btnEnableSmoothShade.Typeface = Typeface.DEFAULT_BOLD
 	
+	Dim btnenableBVH As Button
+	btnenableBVH.Initialize("enableBVH")
+	panelmain.AddView(btnenableBVH, UI.Right(btnEnableSmoothShade) + 4dip, 4dip, 10%x, 10%x)
+	btnenableBVH.Background = UI.GetDrawable(Colors.green, btnenableBVH.Height)
+	btnenableBVH.Text = "B" ' todo make panel with button and label and camera icon
+	btnenableBVH.TextColor = Colors.White
+	btnenableBVH.Padding = Array As Int(0, 0, 0, 0)
+	btnenableBVH.TextSize = 30
+	btnenableBVH.Typeface = Typeface.DEFAULT_BOLD
+	
 
 
 	
@@ -205,6 +215,18 @@ End Sub
 
 Sub enableSmoothShade_Click
 	Main.Opt.SmoothShading = Not(Main.Opt.SmoothShading)
+	CallSub(Main, "resetTimer")
+	
+'	CallSub(Main, "renderRaytraced")
+End Sub
+
+Sub enableBVH_Click
+	Main.Renderer.UseBVH = Not(Main.Renderer.UseBVH)
+	If Main.Renderer.UseBVH Then
+		Sender.As(Button).Color = Colors.Green
+	Else
+		Sender.As(Button).Color = Colors.Red
+	End If
 	CallSub(Main, "resetTimer")
 	
 '	CallSub(Main, "renderRaytraced")

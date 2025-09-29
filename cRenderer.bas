@@ -46,6 +46,20 @@ Sub Class_Globals
 	Dim testTimer As Timer
 	Dim backgroundColor As Int = Colors.black
 	
+	' ===== BVH (Bounding Volume Hierarchy) =====
+	Private BVH_MinX As List, BVH_MinY As List, BVH_MinZ As List
+	Private BVH_MaxX As List, BVH_MaxY As List, BVH_MaxZ As List
+	Private BVH_Left  As List, BVH_Right As List
+	Private BVH_First As List, BVH_Count As List
+	Private BVH_Axis  As List                    ' split axis (0=x,1=y,2=z)
+	Private BVH_TriIdx() As Int                  ' permutation of face indices
+	Private BVH_Root As Int
+	Private BVH_NodeCount As Int
+	Private BVH_LeafMax As Int = 8
+	Private BVH_Built As Boolean
+	Public  UseBVH As Boolean = True
+
+	Public RT_Stat_TriTests As Long, RT_Stat_AABBTests As Long, RT_Stat_BVHNodesVisited As Long
 End Sub
 
 Public Sub Initialize
@@ -247,8 +261,9 @@ End Sub
 
 ' --- RAY TRACE hook ---
 Public Sub RenderRaytrace(scene As cScene, Width As Int, Height As Int) As ResumableSub	
+	RT_Stat_TriTests = 0 : RT_Stat_AABBTests = 0 : RT_Stat_BVHNodesVisited = 0
 	testTimer.Enabled = True
-	Log("starting raytrace")
+'	Log("starting raytrace")
 	' ---- store size ----
 	RT_W = Width : RT_H = Height
 	
@@ -266,7 +281,7 @@ Public Sub RenderRaytrace(scene As cScene, Width As Int, Height As Int) As Resum
 	RT_FaceN = fr.FaceN
 	RT_VertN = fr.VertsN
 	RT_CornerN = fr.CornerN
-
+	
 	' per-face reflectivity from materials
 	RT_Refl.Initialize
 	For i = 0 To fr.Faces.Size - 1
@@ -294,7 +309,8 @@ Public Sub RenderRaytrace(scene As cScene, Width As Int, Height As Int) As Resum
 
 	' ---- precompute accel (AABB + sphere) ----
 	PrecomputeFaceAccel(RT_Verts, RT_Faces)
-
+	If UseBVH Then BuildBVH_FromRTFrame
+	
 	' ---- camera basis / constants ----
 	Dim right As Vec3, upv As Vec3, fwd As Vec3
 	Dim resultArr() As Vec3 = scene.Camera.Basis(right, upv, fwd)
@@ -340,13 +356,14 @@ Public Sub RenderRaytrace(scene As cScene, Width As Int, Height As Int) As Resum
 	Next
 	
 	Wait For AllThreads_Done (success As Boolean, error As String)
+'	Log($"BVH nodes=${BVH_NodeCount} visited=${RT_Stat_BVHNodesVisited}  triTests=${RT_Stat_TriTests}  aabbTests=${RT_Stat_AABBTests}"$)
 	If success Then
 		testTimer.Enabled = False
 		Dim bmp As Bitmap
 		bmp.InitializeMutable(RT_W, RT_H)
 		Dim jbmp As JavaObject = bmp
 		jbmp.RunMethod("setPixels", Array As Object(Pixels, 0, RT_W, 0, 0, RT_W, RT_H))
-		Log("should return bitmap")
+'		Log("should return bitmap")
 		Return bmp
 	Else 
 		testTimer.Enabled = False
@@ -583,7 +600,13 @@ End Sub
 Private Sub TraceColor(r As Ray, depth As Int, v As List, f As List, fn As List, refl As List) As Vec3
 	If depth > RT_MaxDepth Then Return Background(r.Dir)
 
-	Dim h As Hit = TraceRay(r, v, f)
+'	Dim h As Hit = TraceRay(r, v, f)
+	Dim h As Hit
+	If UseBVH And BVH_Built Then
+		h = TraceRay_BVH(r, v, f)
+	Else
+		h = TraceRay(r, v, f)
+	End If
 	If h.FaceIndex = -1 Then Return Background(r.Dir)
 
 	' hit point + face normal (flip to oppose the view ray)
@@ -605,7 +628,8 @@ Private Sub TraceColor(r As Ray, depth As Int, v As List, f As List, fn As List,
 		Dim s As Ray
 		s.Origin = Math3D.AddV(p, Math3D.Mul(n, RT_Eps))
 		s.Dir = Math3D.Mul(RT_LightDir, -1)
-		If AnyHitShadow(s, v, f, RT_Eps) Then lam = 0
+'		If AnyHitShadow(s, v, f, RT_Eps) Then lam = 0
+		If AnyHitShadow_BVH(s, v, f, RT_Eps) Then lam = 0
 	End If
 
 	' base bluish (swap to per-material if you like)
@@ -691,4 +715,286 @@ Private Sub FillTriGouraud(pix() As Int, W As Int, H As Int, _
 			o = o + 1
 		Next
 	Next
+End Sub
+
+Private Sub BVH_ResetNodes
+	BVH_MinX.Initialize : BVH_MinY.Initialize : BVH_MinZ.Initialize
+	BVH_MaxX.Initialize : BVH_MaxY.Initialize : BVH_MaxZ.Initialize
+	BVH_Left.Initialize  : BVH_Right.Initialize
+	BVH_First.Initialize : BVH_Count.Initialize : BVH_Axis.Initialize
+	BVH_NodeCount = 0
+End Sub
+
+Private Sub BVH_NewNode(minx As Double, miny As Double, minz As Double, maxx As Double, maxy As Double, maxz As Double, _
+                        axis As Int, first As Int, cnt As Int, left As Int, right As Int) As Int
+	BVH_MinX.Add(minx) : BVH_MinY.Add(miny) : BVH_MinZ.Add(minz)
+	BVH_MaxX.Add(maxx) : BVH_MaxY.Add(maxy) : BVH_MaxZ.Add(maxz)
+	BVH_Axis.Add(axis)
+	BVH_First.Add(first) : BVH_Count.Add(cnt)
+	BVH_Left.Add(left) : BVH_Right.Add(right)
+	Dim id As Int = BVH_MinX.Size - 1
+	Return id
+End Sub
+
+Private Sub BuildBVH_FromRTFrame
+	Dim nF As Int = RT_Faces.Size
+	If nF = 0 Then 
+		BVH_Built = False
+		Return
+	End If
+	
+	BVH_ResetNodes
+	' permutation 0..nF-1
+	Dim arr(nF) As Int
+	For i = 0 To nF - 1
+		arr(i) = i
+	Next
+	BVH_TriIdx = arr
+
+	BVH_Root = BVH_BuildNode(0, nF)
+	BVH_NodeCount = BVH_MinX.Size
+	BVH_Built = True
+End Sub
+
+' Recursively builds a BVH node over BVH_TriIdx[start .. start+count)
+Private Sub BVH_BuildNode(start As Int, count As Int) As Int
+	' compute node bbox + centroid bbox
+	Dim minx As Double =  1e30, miny As Double =  1e30, minz As Double =  1e30
+	Dim maxx As Double = -1e30, maxy As Double = -1e30, maxz As Double = -1e30
+	Dim cxmin As Double =  1e30, cymin As Double =  1e30, czmin As Double =  1e30
+	Dim cxmax As Double = -1e30, cymax As Double = -1e30, czmax As Double = -1e30
+
+	For i = start To start + count - 1
+		Dim fi As Int = BVH_TriIdx(i)
+		Dim tminx As Double = FMinX.Get(fi), tminy As Double = FMinY.Get(fi), tminz As Double = FMinZ.Get(fi)
+		Dim tmaxx As Double = FMaxX.Get(fi), tmaxy As Double = FMaxY.Get(fi), tmaxz As Double = FMaxZ.Get(fi)
+		If tminx < minx Then minx = tminx
+		If tminy < miny Then miny = tminy
+		If tminz < minz Then minz = tminz
+		If tmaxx > maxx Then maxx = tmaxx
+		If tmaxy > maxy Then maxy = tmaxy
+		If tmaxz > maxz Then maxz = tmaxz
+
+		Dim ccx As Double = FCx.Get(fi), ccy As Double = FCy.Get(fi), ccz As Double = FCz.Get(fi)
+		If ccx < cxmin Then cxmin = ccx
+		If ccy < cymin Then cymin = ccy
+		If ccz < czmin Then czmin = ccz
+		If ccx > cxmax Then cxmax = ccx
+		If ccy > cymax Then cymax = ccy
+		If ccz > czmax Then czmax = ccz
+	Next
+
+	' leaf?
+	If count <= BVH_LeafMax Then
+		Return BVH_NewNode(minx,miny,minz, maxx,maxy,maxz, -1, start, count, -1, -1)
+	End If
+
+	' split axis = widest centroid extent
+	Dim ex As Double = cxmax - cxmin, ey As Double = cymax - cymin, ez As Double = czmax - czmin
+	Dim axis As Int = 0
+	If ey > ex And ey >= ez Then 
+		axis = 1 
+	Else If ez > ex And ez >= ey Then 
+		axis = 2
+	End If
+
+	' split by centroid midpoint
+	Dim splitVal As Double
+	If axis = 0 Then 
+		splitVal = (cxmin + cxmax) / 2 
+	Else If axis = 1 Then 
+		splitVal = (cymin + cymax) / 2
+	Else 
+		splitVal = (czmin + czmax) / 2
+	End If
+
+	' partition BVH_TriIdx[start..start+count)
+	Dim li As Int = 0, ri As Int = 0
+	Dim leftIdx(count) As Int, rightIdx(count) As Int
+	
+	For i = start To start + count - 1
+		Dim fi As Int = BVH_TriIdx(i)
+		Dim cx As Double = FCx.Get(fi), cy As Double = FCy.Get(fi), cz As Double = FCz.Get(fi)
+		Dim key As Double = IIf(axis = 0, cx, IIf(axis = 1, cy, cz))
+		If key < splitVal Then
+			leftIdx(li) = fi : li = li + 1
+		Else
+			rightIdx(ri) = fi : ri = ri + 1
+		End If
+	Next
+	
+	' fallback if degenerate split
+	If li = 0 Or ri = 0 Then
+		li = count / 2 : ri = count - li
+		Dim k As Int = 0
+		For i = 0 To li - 1
+			leftIdx(i) = BVH_TriIdx(start + k) : k = k + 1
+		Next
+		For i = 0 To ri - 1
+			rightIdx(i) = BVH_TriIdx(start + k) : k = k + 1
+		Next
+	End If
+	
+	' write back partitioned order
+	Dim p As Int = start
+	For i = 0 To li - 1
+		BVH_TriIdx(p) = leftIdx(i) : p = p + 1
+	Next
+	Dim mid As Int = p
+	For i = 0 To ri - 1
+		BVH_TriIdx(p) = rightIdx(i) : p = p + 1
+	Next
+	
+	' build children
+	Dim leftNode As Int = BVH_BuildNode(start, li)
+	Dim rightNode As Int = BVH_BuildNode(mid, ri)
+	
+	Return BVH_NewNode(minx,miny,minz, maxx,maxy,maxz, axis, -1, 0, leftNode, rightNode)
+End Sub
+
+Private Sub RayAABB_TNear(rox As Double, roy As Double, roz As Double, rdx As Double, rdy As Double, rdz As Double, _
+                           minx As Double, miny As Double, minz As Double, maxx As Double, maxy As Double, maxz As Double) As Double
+	RT_Stat_AABBTests = RT_Stat_AABBTests + 1
+	Dim tmin As Double = 0, tmax As Double = 1e30, t1 As Double, t2 As Double, inv As Double
+
+	' X
+	If Abs(rdx) < 1e-12 Then
+		If rox < minx Or rox > maxx Then Return 1e30
+	Else
+		inv = 1/rdx : t1 = (minx - rox) * inv : t2 = (maxx - rox) * inv
+		If t1 > t2 Then 
+			Dim tt As Double = t1 : t1 = t2 : t2 = tt
+		End If
+		If t1 > tmin Then tmin = t1
+		If t2 < tmax Then tmax = t2
+		If tmax < tmin Then Return 1e30
+	End If
+	' Y
+	If Abs(rdy) < 1e-12 Then
+		If roy < miny Or roy > maxy Then Return 1e30
+	Else
+		inv = 1/rdy : t1 = (miny - roy) * inv : t2 = (maxy - roy) * inv
+		If t1 > t2 Then 
+			Dim tt2 As Double = t1 : t1 = t2 : t2 = tt2
+		End If
+		If t1 > tmin Then tmin = t1
+		If t2 < tmax Then tmax = t2
+		If tmax < tmin Then Return 1e30
+	End If
+	' Z
+	If Abs(rdz) < 1e-12 Then
+		If roz < minz Or roz > maxz Then Return 1e30
+	Else
+		inv = 1/rdz : t1 = (minz - roz) * inv : t2 = (maxz - roz) * inv
+		If t1 > t2 Then 
+			Dim tt3 As Double = t1 : t1 = t2 : t2 = tt3
+		End If
+		If t1 > tmin Then tmin = t1
+		If t2 < tmax Then tmax = t2
+		If tmax < tmin Then Return 1e30
+	End If
+	If tmax < 0 Then Return 1e30
+	If tmin < 0 Then tmin = 0
+	Return tmin
+End Sub
+
+Private Sub TraceRay_BVH(r As Ray, v As List, f As List) As Hit
+	Dim best As Hit : best.T = 1e30 : best.FaceIndex = -1
+	If Not(BVH_Built) Then Return TraceRay(r, v, f) ' fallback
+	
+	Dim rox As Double = r.Origin.X, roy As Double = r.Origin.Y, roz As Double = r.Origin.Z
+	Dim rdx As Double = r.Dir.X,    rdy As Double = r.Dir.Y,    rdz As Double = r.Dir.Z
+	
+	Dim stack As List : stack.Initialize
+	stack.Add(BVH_Root)
+	
+	Do While stack.Size > 0
+		Dim node As Int = stack.Get(stack.Size - 1)
+		stack.RemoveAt(stack.Size - 1)
+		RT_Stat_BVHNodesVisited = RT_Stat_BVHNodesVisited + 1
+
+		Dim tnear As Double = RayAABB_TNear(rox,roy,roz, rdx,rdy,rdz, _
+                        BVH_MinX.Get(node), BVH_MinY.Get(node), BVH_MinZ.Get(node), _
+                        BVH_MaxX.Get(node), BVH_MaxY.Get(node), BVH_MaxZ.Get(node))
+		If tnear >= best.T Then Continue ' node is further than current hit
+		If tnear >= 1e29 Then Continue   ' miss
+
+		Dim first As Int = BVH_First.Get(node)
+		Dim cnt As Int = BVH_Count.Get(node)
+		If first >= 0 Then
+			' leaf
+			For i = 0 To cnt - 1
+				Dim fi As Int = BVH_TriIdx(first + i)
+				' optional sphere/AABB quick reject (already culled by node)
+				Dim fc As Face = f.Get(fi)
+				Dim a As Vec3 = v.Get(fc.A), b As Vec3 = v.Get(fc.B), c As Vec3 = v.Get(fc.C)
+				Dim h As Hit : h.T = best.T : h.FaceIndex = -1
+				RT_Stat_TriTests = RT_Stat_TriTests + 1
+				If IntersectTriangle(r, a,b,c, h) Then
+					If h.T < best.T Then
+						best = h : best.FaceIndex = fi
+					End If
+				End If
+			Next
+		Else
+			' inner: visit near first (by tNear of child boxes)
+			Dim l As Int = BVH_Left.Get(node), rr As Int = BVH_Right.Get(node)
+			Dim tL As Double = RayAABB_TNear(rox,roy,roz, rdx,rdy,rdz, BVH_MinX.Get(l),BVH_MinY.Get(l),BVH_MinZ.Get(l), BVH_MaxX.Get(l),BVH_MaxY.Get(l),BVH_MaxZ.Get(l))
+			Dim tR As Double = RayAABB_TNear(rox,roy,roz, rdx,rdy,rdz, BVH_MinX.Get(rr),BVH_MinY.Get(rr),BVH_MinZ.Get(rr), BVH_MaxX.Get(rr),BVH_MaxY.Get(rr),BVH_MaxZ.Get(rr))
+			If tL > tR Then
+				If tL < best.T Then stack.Add(l)
+				If tR < best.T Then stack.Add(rr)
+			Else
+				If tR < best.T Then stack.Add(rr)
+				If tL < best.T Then stack.Add(l)
+			End If
+		End If
+	Loop
+	Return best
+End Sub
+
+Private Sub AnyHitShadow_BVH(r As Ray, v As List, f As List, eps As Double) As Boolean
+	If Not(BVH_Built) Then Return AnyHitShadow(r, v, f, eps) ' fallback
+
+	Dim rox As Double = r.Origin.X, roy As Double = r.Origin.Y, roz As Double = r.Origin.Z
+	Dim rdx As Double = r.Dir.X,    rdy As Double = r.Dir.Y,    rdz As Double = r.Dir.Z
+
+	Dim stack As List : stack.Initialize
+	stack.Add(BVH_Root)
+	
+	Do While stack.Size > 0
+		Dim node As Int = stack.Get(stack.Size - 1)
+		stack.RemoveAt(stack.Size - 1)
+
+		Dim tnear As Double = RayAABB_TNear(rox,roy,roz, rdx,rdy,rdz, _
+                        BVH_MinX.Get(node), BVH_MinY.Get(node), BVH_MinZ.Get(node), _
+                        BVH_MaxX.Get(node), BVH_MaxY.Get(node), BVH_MaxZ.Get(node))
+		If tnear >= 1e29 Then Continue
+
+		Dim first As Int = BVH_First.Get(node)
+		Dim cnt As Int = BVH_Count.Get(node)
+		If first >= 0 Then
+			For i = 0 To cnt - 1
+				Dim fi As Int = BVH_TriIdx(first + i)
+				Dim fc As Face = f.Get(fi)
+				Dim a As Vec3 = v.Get(fc.A), b As Vec3 = v.Get(fc.B), c As Vec3 = v.Get(fc.C)
+				Dim h As Hit : h.T = 1e30 : h.FaceIndex = -1
+				RT_Stat_TriTests = RT_Stat_TriTests + 1
+				If IntersectTriangle(r, a,b,c, h) Then
+					If h.T > eps Then Return True
+				End If
+			Next
+		Else
+			Dim l As Int = BVH_Left.Get(node), rr As Int = BVH_Right.Get(node)
+			' no need near-first for any-hit; but doing it can prune a bit
+			Dim tL As Double = RayAABB_TNear(rox,roy,roz, rdx,rdy,rdz, BVH_MinX.Get(l),BVH_MinY.Get(l),BVH_MinZ.Get(l), BVH_MaxX.Get(l),BVH_MaxY.Get(l),BVH_MaxZ.Get(l))
+			Dim tR As Double = RayAABB_TNear(rox,roy,roz, rdx,rdy,rdz, BVH_MinX.Get(rr),BVH_MinY.Get(rr),BVH_MinZ.Get(rr), BVH_MaxX.Get(rr),BVH_MaxY.Get(rr),BVH_MaxZ.Get(rr))
+			If tL > tR Then
+				stack.Add(l) : stack.Add(rr)
+			Else
+				stack.Add(rr) : stack.Add(l)
+			End If
+		End If
+	Loop
+	Return False
 End Sub
