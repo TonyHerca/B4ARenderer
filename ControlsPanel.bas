@@ -128,6 +128,17 @@ Public Sub build
 	btnenableBVH.Typeface = Typeface.DEFAULT_BOLD
 	
 
+	Dim btnpathTrace As Button
+	btnpathTrace.Initialize("renderPathTrace")
+	panelmain.AddView(btnpathTrace, UI.Right(btnenableBVH) + 4dip, 4dip, 10%x, 10%x)
+	btnpathTrace.Background = UI.GetDrawable(Colors.green, btnpathTrace.Height)
+	btnpathTrace.Text = "P" ' todo make panel with button and label and camera icon
+	btnpathTrace.TextColor = Colors.White
+	btnpathTrace.Padding = Array As Int(0, 0, 0, 0)
+	btnpathTrace.TextSize = 30
+	btnpathTrace.Typeface = Typeface.DEFAULT_BOLD
+	
+
 
 	
 '	dim focusCameraAtSomething ??
@@ -208,16 +219,12 @@ End Sub
 Sub RenderShaded_Click
 	Main.Renderer.setRenderMode(1)
 	CallSub(Main, "resetTimer")
-	
-'	CallSub(Main, "renderRaytraced")
 End Sub
 
 
 Sub enableSmoothShade_Click
 	Main.Opt.SmoothShading = Not(Main.Opt.SmoothShading)
 	CallSub(Main, "resetTimer")
-	
-'	CallSub(Main, "renderRaytraced")
 End Sub
 
 Sub enableBVH_Click
@@ -229,7 +236,11 @@ Sub enableBVH_Click
 	End If
 	CallSub(Main, "resetTimer")
 	
-'	CallSub(Main, "renderRaytraced")
+'	
+End Sub
+
+Sub renderPathTrace_Click
+	CallSub(Main, "pathtrace")
 End Sub
 
 

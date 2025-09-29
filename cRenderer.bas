@@ -5,6 +5,9 @@ Type=Class
 Version=13.4
 @EndOfDesignText@
 ' cRenderer.bas
+'#ignore #11
+#IgnoreWarnings: 11, 9
+
 Sub Class_Globals
 	Type RenderOptions(BackfaceCull As Boolean, DrawFaces As Boolean, DrawEdges As Boolean, DrawVerts As Boolean, SmoothShading As Boolean)
 	Type RenderStats(TotalFaces As Int, CulledFaces As Int, DrawnFaces As Int, BuildMs As Int, RenderMs As Int)
@@ -60,6 +63,13 @@ Sub Class_Globals
 	Public  UseBVH As Boolean = True
 
 	Public RT_Stat_TriTests As Long, RT_Stat_AABBTests As Long, RT_Stat_BVHNodesVisited As Long
+	
+	' -------- Path Tracer state --------
+	Private PT_W As Int, PT_H As Int
+	Private PT_AccumR() As Double, PT_AccumG() As Double, PT_AccumB() As Double
+	Private PT_SamplesAccum As Int
+	Private PT_Frame As Long
+	Private PT_UseDirectLight As Boolean = True   ' next-event estimation (shadow ray to light)
 End Sub
 
 Public Sub Initialize
@@ -333,7 +343,7 @@ Public Sub RenderRaytrace(scene As cScene, Width As Int, Height As Int) As Resum
 	Pixels = Math3D.CreateIntArray(RT_W * RT_H)
 
 	' ---- thread fan-out (fixed 4 threads, 8 stripes) ----
-	Dim threadCount As Int = 4
+'	Dim threadCount As Int = 4
 	Dim stripes As Int = 8
 	Dim stripeH As Int = Ceil(RT_H / stripes)
 	
@@ -997,4 +1007,324 @@ Private Sub AnyHitShadow_BVH(r As Ray, v As List, f As List, eps As Double) As B
 		End If
 	Loop
 	Return False
+End Sub
+
+' Reset accumulation when camera or scene changes
+Public Sub PathReset
+	PT_SamplesAccum = 0
+	PT_Frame = PT_Frame + 1
+End Sub
+
+Private Sub EnsurePathBuffers(w As Int, h As Int)
+	If PT_W <> w Or PT_H <> h Or PT_SamplesAccum = 0 Then
+		PT_W = w
+		PT_H = h
+		Dim n As Int = w * h
+		Dim i As Int
+
+		Dim r(n) As Double
+		Dim g(n) As Double
+		Dim b(n) As Double
+		PT_AccumR = r
+		PT_AccumG = g
+		PT_AccumB = b
+		For i = 0 To n - 1
+			PT_AccumR(i) = 0
+			PT_AccumG(i) = 0
+			PT_AccumB(i) = 0
+		Next
+		PT_SamplesAccum = 0
+	End If
+End Sub
+
+' -------- Path Tracing (progressive) --------
+Public Sub RenderPathTrace(scene As cScene, dstW As Int, dstH As Int, spp As Int, maxBounces As Int) As Bitmap
+	' Build frame + RT state like your Whitted renderer
+	Dim fr As SceneFrame = scene.BuildFrame
+	If fr.Faces.Size = 0 Or fr.Verts.Size = 0 Then
+		Dim empty As Bitmap
+		empty.InitializeMutable(dstW, dstH)
+		Return empty
+	End If
+
+	' Camera basis (robust)
+	Dim camPos As Vec3 = scene.Camera.Pos
+	Dim camTarget As Vec3 = scene.Camera.Target
+	Dim camUp As Vec3 = scene.Camera.Up
+
+	Dim fwd As Vec3 = Math3D.Normalize(Math3D.SubV(camTarget, camPos))
+	If Math3D.Len(fwd) < 1e-6 Then
+		fwd = Math3D.V3(0, 0, -1)
+	End If
+	Dim upCand As Vec3
+	If Math3D.Len(camUp) < 1e-6 Then
+		upCand = Math3D.V3(0, 1, 0)
+	Else
+		upCand = camUp
+	End If
+	Dim right As Vec3 = Math3D.Cross(fwd, upCand)
+	If Math3D.Len(right) < 1e-6 Then
+		If Abs(fwd.Y) > 0.9 Then
+			upCand = Math3D.V3(0, 0, 1)
+		Else
+			upCand = Math3D.V3(0, 1, 0)
+		End If
+		right = Math3D.Cross(fwd, upCand)
+	End If
+	right = Math3D.Normalize(right)
+	Dim upv As Vec3 = Math3D.Cross(right, fwd)
+
+	Dim aspect As Double = dstW / Max(1, dstH)
+	Dim fovRad As Double = scene.Camera.FOV_Deg * cPI / 180
+	Dim invTan As Double = 1 / Tan(fovRad / 2)
+
+	' Push RT data from frame
+	RT_Verts = fr.Verts
+	RT_Faces = fr.Faces
+	RT_FaceN = fr.FaceN
+	RT_CornerN = fr.CornerN                     ' smooth shading, per-corner
+	' material data
+	Dim i As Int
+	RT_AlbR.Initialize : RT_AlbG.Initialize : RT_AlbB.Initialize
+	RT_Refl.Initialize
+	For i = 0 To fr.Faces.Size - 1
+		Dim matIdx As Int = fr.FaceMat.Get(i)
+		Dim col1 As Int = Colors.RGB(200, 200, 200)
+		Dim kr As Double = 0
+		If matIdx >= 0 And matIdx < scene.Materials.Size Then
+			Dim M As cMaterial = scene.Materials.Get(matIdx)
+			col1 = M.Albedo
+			kr = Max(0, Min(1, M.Reflectivity))
+		End If
+		RT_AlbR.Add(Bit.And(Bit.ShiftRight(col1, 16), 255) / 255.0)
+		RT_AlbG.Add(Bit.And(Bit.ShiftRight(col1, 8), 255) / 255.0)
+		RT_AlbB.Add(Bit.And(col1, 255) / 255.0)
+		RT_Refl.Add(kr)
+	Next
+	
+	' Precompute triangle accel & BVH
+	PrecomputeFaceAccel(RT_Verts, RT_Faces)
+	UseBVH = True
+	BuildBVH_FromRTFrame
+
+	' Light (directional) from scene
+	Dim haveLight As Boolean = False
+	Dim Ldir As Vec3 = Math3D.V3(-1, -1, -1)
+	If scene.Lights.Size > 0 Then
+		Dim L As cLight = scene.Lights.Get(0)
+		Ldir = L.Direction
+		haveLight = True
+	End If
+	Dim LightToSurf As Vec3 = Math3D.Normalize(Math3D.Mul(Ldir, -1))  ' points from surface toward light
+
+	EnsurePathBuffers(dstW, dstH)
+
+	' Render SPP samples and accumulate
+	Dim x As Int, y As Int, s As Int, idx As Int
+	For y = 0 To dstH - 1
+		For x = 0 To dstW - 1
+			idx = y * dstW + x
+			Dim seed As Int = HashSeed(x, y, PT_SamplesAccum, PT_Frame)
+
+			For s = 0 To spp - 1
+				' Subpixel jitter
+				Dim jx As Double = RNGNext01(seed)
+				Dim jy As Double = RNGNext01(seed)
+
+				' Primary ray NDC -> camera space
+				Dim px As Double = ((x + jx) / dstW) * 2 - 1
+				Dim py As Double = 1 - ((y + jy) / dstH) * 2
+				px = px * aspect
+				Dim dirCam As Vec3 = Math3D.Normalize(Math3D.V3(px / invTan, py / invTan, 1))
+
+				' To world
+				Dim d As Vec3 = Math3D.Normalize(Math3D.V3( _
+                    dirCam.X * right.X + dirCam.Y * upv.X + dirCam.Z * fwd.X, _
+                    dirCam.X * right.Y + dirCam.Y * upv.Y + dirCam.Z * fwd.Y, _
+                    dirCam.X * right.Z + dirCam.Y * upv.Z + dirCam.Z * fwd.Z))
+
+				Dim ray As Ray
+				ray.Origin = camPos
+				ray.Dir = d
+
+				Dim throughput As Vec3 = Math3D.V3(1, 1, 1)
+				Dim col As Vec3 = Math3D.V3(0, 0, 0)
+
+				Dim bounce As Int
+				For bounce = 0 To maxBounces - 1
+					Dim h As Hit = TraceRay_BVH(ray, RT_Verts, RT_Faces)
+					If h.FaceIndex < 0 Then
+						' background is black -> nothing to add
+						Exit
+					End If
+
+					' Hit point and shading normal (per-corner + barycentrics)
+					Dim p As Vec3 = Math3D.V3( _
+                        ray.Origin.X + ray.Dir.X * h.T, _
+                        ray.Origin.Y + ray.Dir.Y * h.T, _
+                        ray.Origin.Z + ray.Dir.Z * h.T)
+
+					Dim fi As Int = h.FaceIndex
+					Dim fc As Face = RT_Faces.Get(fi)
+					Dim u As Double = h.U
+					Dim v As Double = h.V
+					Dim wB As Double = 1 - u - v
+
+					Dim ci As Int = fi * 3
+					Dim aN As Vec3 = RT_CornerN.Get(ci + 0)
+					Dim bN As Vec3 = RT_CornerN.Get(ci + 1)
+					Dim cN As Vec3 = RT_CornerN.Get(ci + 2)
+					Dim n As Vec3 = Math3D.Normalize(Math3D.AddV(Math3D.AddV(Math3D.Mul(aN, wB), Math3D.Mul(bN, u)), Math3D.Mul(cN, v)))
+					If Math3D.Dot(n, ray.Dir) > 0 Then
+						n = Math3D.Mul(n, -1)
+					End If
+
+					' Material
+					Dim base As Vec3 = Math3D.V3(RT_AlbR.Get(fi), RT_AlbG.Get(fi), RT_AlbB.Get(fi))
+					Dim kRefl As Double = RT_Refl.Get(fi)
+
+					' Direct light (next-event) to reduce noise
+					If PT_UseDirectLight And haveLight Then
+						Dim lam As Double = Math3D.Dot(n, LightToSurf)
+						If lam > 0 Then
+							Dim sray As Ray
+							sray.Origin = Math3D.AddV(p, Math3D.Mul(n, RT_Eps))
+							sray.Dir = LightToSurf
+							Dim blocked As Boolean = AnyHitShadow_BVH(sray, RT_Verts, RT_Faces, RT_Eps)
+							If blocked = False Then
+								' Diffuse BRDF = base / PI
+								Dim contrib As Vec3 = Math3D.V3(base.X * (lam / cPI), base.Y * (lam / cPI), base.Z * (lam / cPI))
+								col = Math3D.AddV(col, Math3D.V3(throughput.X * contrib.X, throughput.Y * contrib.Y, throughput.Z * contrib.Z))
+							End If
+						End If
+					End If
+
+					' Russian roulette (after a few bounces)
+					If bounce >= 3 Then
+						Dim q As Double = Clamp01(Luminance(throughput))
+						Dim rStop As Double = RNGNext01(seed)
+						If rStop > q Then
+							Exit
+						End If
+						throughput = Math3D.V3(throughput.X / q, throughput.Y / q, throughput.Z / q)
+					End If
+
+					' Choose event: perfect mirror with prob kRefl, else diffuse
+					Dim rPick As Double = RNGNext01(seed)
+					If rPick < kRefl Then
+						' Mirror reflection (delta lobe): throughput *= 1 (perfect energy-conserving mirror)
+						Dim rdir As Vec3 = Math3D.Normalize(Reflect(ray.Dir, n))
+						ray.Origin = Math3D.AddV(p, Math3D.Mul(n, RT_Eps))
+						ray.Dir = rdir
+						' continue to next bounce
+					Else
+						' Diffuse bounce: cosine-weighted hemisphere
+						Dim tB As Vec3, bB As Vec3
+						OrthoBasis(n, tB, bB)
+						Dim u1 As Double = RNGNext01(seed)
+						Dim u2 As Double = RNGNext01(seed)
+						Dim ts As Vec3 = SampleCosHemisphere(u1, u2)
+						Dim ndir As Vec3 = TangentToWorld(ts, tB, bB, n)
+
+						' With cosine sampling: f = base/PI, pdf = cos/pi -> throughput *= base
+						throughput = Math3D.V3(throughput.X * base.X, throughput.Y * base.Y, throughput.Z * base.Z)
+
+						ray.Origin = Math3D.AddV(p, Math3D.Mul(n, RT_Eps))
+						ray.Dir = ndir
+					End If
+				Next
+
+				' Accumulate sample color
+				PT_AccumR(idx) = PT_AccumR(idx) + col.X
+				PT_AccumG(idx) = PT_AccumG(idx) + col.Y
+				PT_AccumB(idx) = PT_AccumB(idx) + col.Z
+			Next
+		Next
+	Next
+
+	PT_SamplesAccum = PT_SamplesAccum + spp
+
+	' Pack to bitmap (average)
+	Dim pix(dstW * dstH) As Int
+	Dim i2 As Int = 0
+	Dim invS As Double = 1 / Max(1, PT_SamplesAccum)
+	For i2 = 0 To pix.Length - 1
+		Dim r As Double = PT_AccumR(i2) * invS
+		Dim g As Double = PT_AccumG(i2) * invS
+		Dim b As Double = PT_AccumB(i2) * invS
+		pix(i2) = PackColor(r, g, b)
+	Next
+
+	Dim bmp As Bitmap
+	bmp.InitializeMutable(dstW, dstH)
+	Dim jbmp As JavaObject = bmp
+	jbmp.RunMethod("setPixels", Array As Object(pix, 0, dstW, 0, 0, dstW, dstH))
+	Return bmp
+End Sub
+
+' --- small math helpers (Vec3 versions you already use) ---
+Private Sub OrthoBasis(n As Vec3, t As Vec3, b As Vec3)
+	' Build tangent/bitangent orthonormal to n
+	Dim a As Vec3
+	If Abs(n.Z) < 0.999 Then
+		a = Math3D.V3(0, 0, 1)
+	Else
+		a = Math3D.V3(0, 1, 0)
+	End If
+	t = Math3D.Normalize(Math3D.Cross(a, n))
+	b = Math3D.Cross(n, t)
+End Sub
+
+' Cosine-weighted hemisphere sample around +Z in tangent space
+Private Sub SampleCosHemisphere(u1 As Double, u2 As Double) As Vec3
+	Dim r As Double = Sqrt(u1)
+	Dim theta As Double = 2 * cPI * u2
+	Dim x As Double = r * Cos(theta)
+	Dim y As Double = r * Sin(theta)
+	Dim z As Double = Sqrt(Max(0, 1 - u1))
+	Return Math3D.V3(x, y, z)
+End Sub
+
+' Map tangent-space dir to world using (t, b, n)
+Private Sub TangentToWorld(ts As Vec3, t As Vec3, b As Vec3, n As Vec3) As Vec3
+	Return Math3D.Normalize(Math3D.V3( _
+        ts.X * t.X + ts.Y * b.X + ts.Z * n.X, _
+        ts.X * t.Y + ts.Y * b.Y + ts.Z * n.Y, _
+        ts.X * t.Z + ts.Y * b.Z + ts.Z * n.Z))
+End Sub
+
+Private Sub Luminance(c As Vec3) As Double
+	Return 0.2126 * c.X + 0.7152 * c.Y + 0.0722 * c.Z
+End Sub
+
+Private Sub Clamp01(x As Double) As Double
+	If x < 0 Then Return 0
+	If x > 1 Then Return 1
+	Return x
+End Sub
+
+Private Sub PackColor(r As Double, g As Double, b As Double) As Int
+	Dim rr As Int = Min(255, Max(0, r * 255))
+	Dim gg As Int = Min(255, Max(0, g * 255))
+	Dim bb As Int = Min(255, Max(0, b * 255))
+	Return Math3D.ARGB255(255, rr, gg, bb)
+End Sub
+
+' --- tiny deterministic RNG (xorshift32) ---
+Private Sub HashSeed(x As Int, y As Int, s As Int, f As Long) As Int
+	Dim z As Int = x * 1973
+	z = Bit.Xor(z, y * 9277)
+	z = Bit.Xor(z, s * 26699)
+	z = Bit.Xor(z, Bit.And(f, 0x7FFFFFFF))
+	If z = 0 Then z = 1
+	Return z
+End Sub
+
+Private Sub RNGNext01(state As Int) As Double
+	Dim x As Long = state
+	x = Bit.Xor(x, Bit.ShiftLeft(x, 13))
+	x = Bit.Xor(x, Bit.ShiftRight(x, 17))
+	x = Bit.Xor(x, Bit.ShiftLeft(x, 5))
+	state = Bit.And(x, 0x7FFFFFFF)
+	Return (state Mod 65536) / 65536.0
 End Sub

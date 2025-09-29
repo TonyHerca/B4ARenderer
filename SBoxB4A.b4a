@@ -11,10 +11,11 @@ Group=Default Group
 Library1=core
 Library2=gesturedetector
 Library3=javaobject
-Library4=rippledrawable
-Library5=threading
-Library6=xui
-Library7=phone
+Library4=phone
+Library5=rippledrawable
+Library6=threading
+Library7=xui
+Library8=stringutils
 ManifestCode='This code will be applied to the manifest file during compilation.~\n~'You do not need to modify it in most cases.~\n~'See this link for for more information: https://www.b4x.com/forum/showthread.php?p=78136~\n~AddManifestText(~\n~<uses-sdk android:minSdkVersion="21" android:targetSdkVersion="35"/>~\n~<supports-screens android:largeScreens="true" ~\n~    android:normalScreens="true" ~\n~    android:smallScreens="true" ~\n~    android:anyDensity="true"/>)~\n~SetApplicationAttribute(android:icon, "@drawable/icon")~\n~SetApplicationAttribute(android:label, "$LABEL$")~\n~CreateResourceFromFile(Macro, Themes.LightTheme)~\n~'End of default text.~\n~SetApplicationAttribute(android:hardwareAccelerated, "true")
 Module1=ButtonToggle
 Module10=CustomButton
@@ -35,7 +36,7 @@ Module7=ControlsPanel
 Module8=cRenderer
 Module9=cScene
 NumberOfFiles=4
-NumberOfLibraries=7
+NumberOfLibraries=8
 NumberOfModules=18
 Version=13.4
 @EndOfDesignText@
@@ -267,4 +268,15 @@ public Sub DrawThisBitmap(bmp As Bitmap)
 	Dim rect As Rect : rect.Initialize(0, 0, 100%x, 100%y)
 	cvs.DrawBitmap(bmp, Null, rect)
 	pnl.Invalidate
+End Sub
+
+Public Sub pathtrace
+	Timer.Enabled = False
+	Log("START == PathTrace")
+	Dim bmp As Bitmap = Renderer.RenderPathTrace(Scene, pnl.Width, pnl.Height, 1, 3)   ' spp=1, maxBounces=3
+	cvs.DrawColor(Colors.Black)
+	Dim dst As Rect : dst.Initialize(0, 0, pnl.Width, pnl.Height)
+	cvs.DrawBitmap(bmp, Null, dst)
+	pnl.Invalidate
+	Log("END == PathTrace")
 End Sub
