@@ -39,13 +39,12 @@ Sub Class_Globals
 	' cached for analytics
 	Public LastStats As RenderStats
 	
-End Sub
-
-Public Sub Initialize
+	Dim testTimer As Timer
 	
 End Sub
 
-public Sub Render
+Public Sub Initialize
+	testTimer.Initialize("timer", 50)
 	
 End Sub
 
@@ -200,6 +199,7 @@ End Sub
 
 ' --- RAY TRACE hook ---
 Public Sub RenderRaytrace(scene As cScene, Width As Int, Height As Int) As ResumableSub	
+	testTimer.Enabled = True
 	Log("starting raytrace")
 	' ---- store size ----
 	RT_W = Width : RT_H = Height
@@ -267,6 +267,7 @@ Public Sub RenderRaytrace(scene As cScene, Width As Int, Height As Int) As Resum
 	
 	Dim s As Int = 0
 	For stripe = 0 To stripes - 1
+		
 		Dim y0 As Int = stripe * stripeH
 		Dim y1 As Int = Min(RT_H, y0 + stripeH)
 		If y0 >= y1 Then Continue
@@ -283,8 +284,7 @@ Public Sub RenderRaytrace(scene As cScene, Width As Int, Height As Int) As Resum
 	
 	Wait For AllThreads_Done (success As Boolean, error As String)
 	If success Then
-'		Log(success)
-		' ---- pack ARGB into bitmap ----
+		testTimer.Enabled = False
 		Dim bmp As Bitmap
 		bmp.InitializeMutable(RT_W, RT_H)
 		Dim jbmp As JavaObject = bmp
@@ -292,6 +292,7 @@ Public Sub RenderRaytrace(scene As cScene, Width As Int, Height As Int) As Resum
 		Log("should return bitmap")
 		Return bmp
 	Else 
+		testTimer.Enabled = False
 		Log(success)
 		Log(error)
 		Return Null
@@ -323,6 +324,14 @@ Sub TraceStripe_BG(ArgsOBJ As Object)
 			Pixels(rowOff + x) = Colors.ARGB(255, c.X*255, c.Y*255, c.Z*255)
 		Next
 	Next
+End Sub
+
+Sub timer_Tick
+	Dim bmp As Bitmap
+	bmp.InitializeMutable(RT_W, RT_H)
+	Dim jbmp As JavaObject = bmp
+	jbmp.RunMethod("setPixels", Array As Object(Pixels, 0, RT_W, 0, 0, RT_W, RT_H))
+	CallSub2(Main, "DrawThisBitmap", bmp)
 End Sub
 
 ' Decrements the countdown when a worker finishes its queued stripes

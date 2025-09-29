@@ -55,6 +55,6 @@ ModuleClosedNodes6=
 ModuleClosedNodes7=
 ModuleClosedNodes8=
 ModuleClosedNodes9=
-NavigationStack=ButtonToggle,Class_Globals,0,0,CustomButton,Class_Globals,0,0,CustomButton,setBorderColor,199,0,EditVec3Field,AddToParent,46,0,UI,GetDrawableWithBorder,37,2,UI,GetDrawable,32,0,Main,Activity_Create,98,0,ControlsPanel,AddSliderToPopover,202,0,ControlsPanel,objSettings_VisibilityChanged,230,0,ControlsPanel,refreshObjectPopover,224,0
+NavigationStack=Main,Activity_Create,98,0,ControlsPanel,AddSliderToPopover,202,0,ControlsPanel,objSettings_VisibilityChanged,230,0,ControlsPanel,AddModelBarToPopover,212,0,ControlsPanel,refreshObjectPopover,224,0,cRenderer,Initialize,43,0,cRenderer,Class_Globals,7,0,cRenderer,RenderRaytrace,281,0,cRenderer,timer_Tick,329,0,cRenderer,TraceStripe_BG,314,0
 SelectedBuild=0
 VisibleModules=7,2,8,9,12,13,16,5,4,3,6,14,11,1,15,10,18
