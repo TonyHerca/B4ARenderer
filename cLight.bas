@@ -11,12 +11,13 @@ Sub Class_Globals
 	Public Const KIND_SPOT As Int = 2
 	Public Const KIND_RECT As Int = 3     ' rectangular area (square is just equal U/V lengths)
 
-	Public Name As String = "Light"
-	Public Kind As Int = KIND_DIRECTIONAL
-	Public Direction As Vec3   ' for directional light; points FROM light to scene
-	Public Color As Int = Colors.White
-	Public Intensity As Double = 1.0
-	Public Position As Vec3      ' position for point/spot/rect
+        Public Name As String = "Light"
+        Public Kind As Int = KIND_DIRECTIONAL
+        Public Direction As Vec3   ' for directional light; points FROM light to scene
+        Public Color As Int = Colors.White
+        Public Intensity As Double = 1.0
+        Public Position As Vec3      ' position for point/spot/rect
+        Public Enabled As Boolean = True
 	
 	Public CosInner As Double = Cos(15 * cPI / 180)
 	Public CosOuter As Double = Cos(20 * cPI / 180)
@@ -27,10 +28,11 @@ Sub Class_Globals
 End Sub
 
 Public Sub Initialize(dir As Vec3)
-	Direction = Math3D.V3(0, -1, 0)
-	Position = Math3D.V3(0, 0, 0)
-	U = Math3D.V3(0, 0, 0)
-	V = Math3D.V3(0, 0, 0)
+        Direction = Math3D.V3(0, -1, 0)
+        Position = Math3D.V3(0, 0, 0)
+        U = Math3D.V3(0, 0, 0)
+        V = Math3D.V3(0, 0, 0)
+        Enabled = True
 End Sub
 
 
