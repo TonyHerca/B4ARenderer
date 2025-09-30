@@ -71,6 +71,13 @@ Public Sub ARGB255(a As Int, r As Int, g As Int, b As Int) As Int
 	Return Bit.Or(Bit.ShiftLeft(a,24), Colors.RGB(r,g,b))
 End Sub
 
+public Sub IntToRGB(clr As Int) As Vec3
+	Dim ar As Int = Bit.And(Bit.ShiftRight(clr,16),255)
+	Dim ag As Int = Bit.And(Bit.ShiftRight(clr,8),255)
+	Dim ab As Int = Bit.And(clr,255)
+	Return V3(ar, ag, ab)
+End Sub
+
 Public Sub CreateIntArray(n As Int) As Int()
 	Dim a(n) As Int
 	Return a

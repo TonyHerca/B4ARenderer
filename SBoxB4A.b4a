@@ -90,103 +90,16 @@ Sub Activity_Create(FirstTime As Boolean)
 	Activity.AddView(Controls.panelmain, 0, 0, 100%x, 100%y)
 	Controls.build
 	
-'	Dim pnlUITest As Panel
-'	pnlUITest.Initialize("")
-'	Activity.AddView(pnlUITest, 0, 0, 100%x, 100%y)
-'	
-'	Dim newModelbar As ModelBar
-'	newModelbar.Initialize(Me, "asd")
-'	newModelbar.AddToParent(pnlUITest, 0, 0, 100%x)
-'	newModelbar.Title = "asd"
-'	
-'	Dim input3 As EditVec3Field
-'	input3.Initialize(Me, "ev")
-'	input3.AddToParent(pnlUITest, 10dip, 10dip, 100%x - 20dip)
-	
-'	Return
-	
 '	========= SCENE ==========
 
 	Scene.Initialize
+	Scene.BuildPreset_CornellBox
 '		============== Materials
 
-	Dim mPot As cMaterial = Scene.CreateMaterial("Teapot", Colors.RGB(255, 130, 252), 0.35)
-	Dim mFloor As cMaterial = Scene.CreateMaterial("matFloor", Colors.RGB(Rnd(150, 255), Rnd(150, 255), Rnd(150, 255)), 0.35)
-	Dim mWall As cMaterial = Scene.CreateMaterial("matWall", Colors.White, 0.8)
-	Dim materialRed As cMaterial = Scene.CreateMaterial("matRed", Colors.Red, 0)
-	Dim materialGreen As cMaterial = Scene.CreateMaterial("matGreen", Colors.Green, 0)
-	Dim materialBlue As cMaterial = Scene.CreateMaterial("matBlue", Colors.Blue, 0)
-	' Materials
-'	Dim matId As Int = Scene.AddMaterial(mTeapot)
-	
-	
-	Dim meshPot As cMesh : meshPot.Initialize("Teapot") : meshPot.LoadOBJFromAssets("teapot.obj", 0)
-	Dim mdlPot As cModel = Scene.AddModelCreate("Pot1", meshPot, mPot)
-	mdlPot.SetTRS(Math3D.V3(0,0,0), Math3D.V3(0,0,0), 0.2)
-	
-	
-	Dim meshFloor As cMesh : meshFloor.Initialize("Floor") : meshFloor.BuildPlaneXZ(10, 8, 0, 1, 1, mFloor.id)
-	meshFloor.FlipNormalsAll
-	Dim mdlFloor As cModel = Scene.AddModelCreate("floor1", meshFloor, mFloor)
-	mdlFloor.SetTRS(Math3D.SubV(mdlFloor.Position, Math3D.V3(0, 1, 0)), Math3D.V3(0,0,0), 1)
-	
-		
-	Log(materialRed.id)
-	Log(materialGreen.id)
-	Log(materialBlue.id)
-	
-	Dim meshWall As cMesh : meshWall.Initialize("BackWall") : meshWall.BuildPlaneXY(10, 5, -3, 1, 1, mWall.id)
-	Dim mdlWall As cModel = Scene.AddModelCreate("wall1", meshWall, mWall)
-	
-	Dim meshCube As cMesh
-	meshCube.Initialize("cube")
-	meshCube.BuildCube(1, materialGreen.id)
-	Dim mdlCube As cModel
-	mdlCube.Initialize("cubemodel", meshCube, materialGreen)
-	Scene.AddModel(mdlCube)
-	mdlCube.SetTRS(Math3D.V3(2,0,0), Math3D.V3(0,0,0), 0.2)
-	mdlCube.Mesh.FlipNormalsAll
-	
-	Dim meshcyl As cMesh
-	meshcyl.Initialize("cyl")
-	meshcyl.BuildCylinder(1, 1, 16, True, True, materialRed.id)
-	Dim modelcyl As cModel
-	modelcyl.Initialize("cylmodel", meshcyl, materialGreen)
-	Scene.AddModel(modelcyl)
-	modelcyl.SetTRS(Math3D.V3(-2,0,0), Math3D.V3(0,0,0), 0.2)
-	modelcyl.Mesh.FlipNormalsAll
-	
-	Dim meshcone As cMesh
-	meshcone.Initialize("cone")
-	meshcone.Buildcone(1, 1, 4, True, materialBlue.id)
-	Dim mdlcone As cModel
-	mdlcone.Initialize("conemodel", meshcone, materialBlue)
-	Scene.AddModel(mdlcone)
-	mdlcone.SetTRS(Math3D.V3(-1,0,0), Math3D.V3(0,0,0), 0.2)
-	mdlcone.Mesh.FlipNormalsAll
-	
-	
-	Dim meshsphere As cMesh
-	meshsphere.Initialize("sphere")
-	meshsphere.BuildUVSphere(1, 20, 20, 1)
-	Dim mdlsphere As cModel
-	mdlsphere.Initialize("spheremodel", meshsphere, materialRed)
-	Scene.AddModel(mdlsphere)
-	mdlsphere.SetTRS(Math3D.V3(1,0,0), Math3D.V3(0,0,0), 0.2)
-	
-	
-'	mdlWall.SetTRS(Math3D.V3(0,0,0), Math3D.V3(0,0,0), 1)
-	
-'	Scene.Selected = mdlPot
-'	Scene.Selected.Position = Math3D.V3(0.3, 0, 0)
-'	Scene.Selected.Rotation = Math3D.V3(0, 0.6, 0)
-	
-'	Scene.AddMesh(bear)
-	
 	Controls.refreshObjectPopover
 	
 	Renderer.Initialize
-	Opt.BackfaceCull = True : Opt.DrawFaces = True : Opt.DrawEdges = True : Opt.DrawVerts = False : Opt.SmoothShading = False	
+	Opt.BackfaceCull = True : Opt.DrawFaces = True : Opt.DrawEdges = False : Opt.DrawVerts = False : Opt.SmoothShading = False	
 	
 
 	cvs.Initialize(pnl)

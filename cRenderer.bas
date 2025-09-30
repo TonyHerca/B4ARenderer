@@ -4,8 +4,6 @@ ModulesStructureVersion=1
 Type=Class
 Version=13.4
 @EndOfDesignText@
-' cRenderer.bas
-'#ignore #11
 #IgnoreWarnings: 11, 9
 
 Sub Class_Globals
@@ -33,7 +31,9 @@ Sub Class_Globals
 	Private RT_LightDir As Vec3
 	Public  RT_MaxDepth As Int = 2
 	Public  RT_Eps As Double = 1e-3
-
+	Private RT_Scene As cScene
+	Private RT_AreaLightSamples As Int = 4
+	
 	' Per-face acceleration (parallel to faces)
 	Private FMinX As List, FMinY As List, FMinZ As List
 	Private FMaxX As List, FMaxY As List, FMaxZ As List
@@ -272,6 +272,7 @@ End Sub
 ' --- RAY TRACE hook ---
 Public Sub RenderRaytrace(scene As cScene, Width As Int, Height As Int) As ResumableSub	
 	RT_Stat_TriTests = 0 : RT_Stat_AABBTests = 0 : RT_Stat_BVHNodesVisited = 0
+	RT_Scene = scene
 	testTimer.Enabled = True
 '	Log("starting raytrace")
 	' ---- store size ----
@@ -642,17 +643,13 @@ Private Sub TraceColor(r As Ray, depth As Int, v As List, f As List, fn As List,
 		If AnyHitShadow_BVH(s, v, f, RT_Eps) Then lam = 0
 	End If
 
-	' base bluish (swap to per-material if you like)
+	
 	Dim base As Vec3 = Math3D.V3( _
 	    RT_AlbR.Get(h.FaceIndex), _
 	    RT_AlbG.Get(h.FaceIndex), _
 	    RT_AlbB.Get(h.FaceIndex))
-	Dim direct As Vec3 = Math3D.V3( _
-        base.X*(0.1 + 0.9*lam), _
-        base.Y*(0.1 + 0.9*lam), _
-        base.Z*(0.1 + 0.9*lam))
-		
 	
+	Dim direct As Vec3 = RT_DirectLight(p, n, base, h.FaceIndex)
 
 	' reflection mix
 	Dim k As Double = refl.Get(h.FaceIndex)
@@ -1185,18 +1182,8 @@ Public Sub RenderPathTrace(scene As cScene, dstW As Int, dstH As Int, spp As Int
 
 					' Direct light (next-event) to reduce noise
 					If PT_UseDirectLight And haveLight Then
-						Dim lam As Double = Math3D.Dot(n, LightToSurf)
-						If lam > 0 Then
-							Dim sray As Ray
-							sray.Origin = Math3D.AddV(p, Math3D.Mul(n, RT_Eps))
-							sray.Dir = LightToSurf
-							Dim blocked As Boolean = AnyHitShadow_BVH(sray, RT_Verts, RT_Faces, RT_Eps)
-							If blocked = False Then
-								' Diffuse BRDF = base / PI
-								Dim contrib As Vec3 = Math3D.V3(base.X * (lam / cPI), base.Y * (lam / cPI), base.Z * (lam / cPI))
-								col = Math3D.AddV(col, Math3D.V3(throughput.X * contrib.X, throughput.Y * contrib.Y, throughput.Z * contrib.Z))
-							End If
-						End If
+						Dim dl As Vec3 = PT_DirectLight(p, n, base, seed, scene)
+						col = Math3D.AddV(col, Math3D.V3(throughput.X * dl.X, throughput.Y * dl.Y, throughput.Z * dl.Z))
 					End If
 
 					' Russian roulette (after a few bounces)
@@ -1327,4 +1314,249 @@ Private Sub RNGNext01(state As Int) As Double
 	x = Bit.Xor(x, Bit.ShiftLeft(x, 5))
 	state = Bit.And(x, 0x7FFFFFFF)
 	Return (state Mod 65536) / 65536.0
+End Sub
+
+' Convert light color*intensity to linear RGB (0..1)
+Private Sub LightRGB(L As cLight) As Vec3
+	Dim r As Double = Bit.And(Bit.ShiftRight(L.Color, 16), 255) / 255.0
+	Dim g As Double = Bit.And(Bit.ShiftRight(L.Color, 8), 255) / 255.0
+	Dim b As Double = Bit.And(L.Color, 255) / 255.0
+	Return Math3D.V3(r * L.Intensity, g * L.Intensity, b * L.Intensity)
+End Sub
+
+' Uniform sample on a rectangular area light: returns a point on the emitter surface
+Private Sub SampleRect(L As cLight, u1 As Double, u2 As Double) As Vec3
+	Dim sx As Double = u1 * 2 - 1
+	Dim sy As Double = u2 * 2 - 1
+	Return Math3D.AddV(Math3D.AddV(L.Position, Math3D.Mul(L.U, sx)), Math3D.Mul(L.V, sy))
+End Sub
+
+Private Sub RT_DirectLight(p As Vec3, n As Vec3, base As Vec3, faceIndex As Int) As Vec3
+	Dim sum As Vec3
+	sum = Math3D.V3(0, 0, 0)
+
+	If RT_Scene = Null Then
+		Return sum
+	End If
+	Dim i As Int
+	For i = 0 To RT_Scene.Lights.Size - 1
+		Dim L As cLight = RT_Scene.Lights.Get(i)
+		Dim E As Vec3 = LightRGB(L)
+
+		If L.Kind = l.KIND_DIRECTIONAL Then
+			Dim wi As Vec3 = Math3D.Normalize(Math3D.Mul(L.Direction, -1))
+			Dim lam As Double = Math3D.Dot(n, wi)
+			If lam > 0 Then
+				Dim sray As Ray
+				sray.Origin = Math3D.AddV(p, Math3D.Mul(n, RT_Eps))
+				sray.Dir = wi
+				Dim blocked As Boolean = AnyHitShadow_BVH(sray, RT_Verts, RT_Faces, RT_Eps)
+				If blocked = False Then
+					' Lambert: base/π * E * cos
+					Dim add As Vec3 = Math3D.V3(E.X * base.X * lam / cPI, E.Y * base.Y * lam / cPI, E.Z * base.Z * lam / cPI)
+					sum = Math3D.AddV(sum, add)
+				End If
+			End If
+
+		Else If L.Kind = l.KIND_POINT Then
+			Dim toL As Vec3 = Math3D.SubV(L.Position, p)
+			Dim d2 As Double = Math3D.Dot(toL, toL)
+			If d2 > 1e-9 Then
+				Dim d As Double = Sqrt(d2)
+				Dim wi As Vec3 = Math3D.Mul(toL, 1 / d)
+				Dim lam As Double = Math3D.Dot(n, wi)
+				If lam > 0 Then
+					Dim sray As Ray
+					sray.Origin = Math3D.AddV(p, Math3D.Mul(n, RT_Eps))
+					sray.Dir = wi
+					Dim blocked As Boolean = AnyHitShadow_BVH(sray, RT_Verts, RT_Faces, RT_Eps)
+					If blocked = False Then
+						Dim invr2 As Double = 1 / d2
+						Dim add As Vec3 = Math3D.V3(E.X * base.X * lam * invr2 / cPI, E.Y * base.Y * lam * invr2 / cPI, E.Z * base.Z * lam * invr2 / cPI)
+						sum = Math3D.AddV(sum, add)
+					End If
+				End If
+			End If
+
+		Else If L.Kind = l.KIND_SPOT Then
+			Dim toL As Vec3 = Math3D.SubV(L.Position, p)
+			Dim d2 As Double = Math3D.Dot(toL, toL)
+			If d2 > 1e-9 Then
+				Dim d As Double = Sqrt(d2)
+				Dim wi As Vec3 = Math3D.Mul(toL, 1 / d)
+				Dim lam As Double = Math3D.Dot(n, wi)
+				If lam > 0 Then
+					Dim spotCos As Double = Math3D.Dot(Math3D.Normalize(Math3D.Mul(L.Direction, -1)), wi)
+					If spotCos > L.CosOuter Then
+						Dim t As Double
+						If spotCos >= L.CosInner Then
+							t = 1
+						Else
+							Dim s As Double = (spotCos - L.CosOuter) / Max(1e-6, (L.CosInner - L.CosOuter))
+							t = s * s * (3 - 2 * s)
+						End If
+						Dim sray As Ray
+						sray.Origin = Math3D.AddV(p, Math3D.Mul(n, RT_Eps))
+						sray.Dir = wi
+						Dim blocked As Boolean = AnyHitShadow_BVH(sray, RT_Verts, RT_Faces, RT_Eps)
+						If blocked = False Then
+							Dim invr2 As Double = 1 / d2
+							Dim add As Vec3 = Math3D.V3(E.X * base.X * lam * invr2 * t / cPI, E.Y * base.Y * lam * invr2 * t / cPI, E.Z * base.Z * lam * invr2 * t / cPI)
+							sum = Math3D.AddV(sum, add)
+						End If
+					End If
+				End If
+			End If
+
+		Else If L.Kind = l.KIND_RECT Then
+			' Soft shadows via multi-sample shadow rays
+			Dim nL As Vec3 = L.Normal
+			Dim area As Double = L.Area
+			If area > 0 Then
+				Dim seed As Int = HashSeed(faceIndex, i, 12345, 0)
+				Dim s1 As Int
+				Dim acc As Vec3
+				acc = Math3D.V3(0, 0, 0)
+				For s1 = 0 To RT_AreaLightSamples - 1
+					Dim u1 As Double = RNGNext01(seed)
+					Dim u2 As Double = RNGNext01(seed)
+					Dim xL As Vec3 = SampleRect(L, u1, u2)
+
+					Dim toL As Vec3 = Math3D.SubV(xL, p)
+					Dim d2 As Double = Math3D.Dot(toL, toL)
+					If d2 <= 1e-9 Then
+						Continue
+					End If
+					Dim d As Double = Sqrt(d2)
+					Dim wi As Vec3 = Math3D.Mul(toL, 1 / d)
+
+					Dim lamS As Double = Math3D.Dot(n, wi)
+					If lamS <= 0 Then
+						Continue
+					End If
+					Dim lamL As Double = Math3D.Dot(nL, Math3D.Mul(wi, -1))
+					If lamL <= 0 Then
+						Continue
+					End If
+
+					Dim sray As Ray
+					sray.Origin = Math3D.AddV(p, Math3D.Mul(n, RT_Eps))
+					sray.Dir = wi
+					Dim blocked As Boolean = AnyHitShadow_BVH(sray, RT_Verts, RT_Faces, RT_Eps)
+					If blocked Then
+						Continue
+					End If
+
+					' base/π * E * (cosS * cosL) * area / r^2
+					Dim geom As Double = lamS * lamL * area / d2
+					Dim add As Vec3 = Math3D.V3(E.X * base.X * geom / cPI, E.Y * base.Y * geom / cPI, E.Z * base.Z * geom / cPI)
+					acc = Math3D.AddV(acc, add)
+				Next
+				Dim inv As Double = 1 / Max(1, RT_AreaLightSamples)
+				sum = Math3D.AddV(sum, Math3D.Mul(acc, inv))
+			End If
+		End If
+	Next
+
+	Return sum
+End Sub
+
+Private Sub PT_DirectLight(p As Vec3, n As Vec3, base As Vec3, seed As Int, scene As cScene) As Vec3
+	Dim sum As Vec3
+	sum = Math3D.V3(0, 0, 0)
+	Dim i As Int
+	For i = 0 To scene.Lights.Size - 1
+		Dim L As cLight = scene.Lights.Get(i)
+		Dim E As Vec3 = LightRGB(L)
+
+		If L.Kind = l.KIND_DIRECTIONAL Then
+			Dim wi As Vec3 = Math3D.Normalize(Math3D.Mul(L.Direction, -1))
+			Dim lam As Double = Math3D.Dot(n, wi)
+			If lam > 0 Then
+				Dim sray As Ray
+				sray.Origin = Math3D.AddV(p, Math3D.Mul(n, RT_Eps))
+				sray.Dir = wi
+				If AnyHitShadow_BVH(sray, RT_Verts, RT_Faces, RT_Eps) = False Then
+					sum = Math3D.AddV(sum, Math3D.V3(E.X * base.X * lam / cPI, E.Y * base.Y * lam / cPI, E.Z * base.Z * lam / cPI))
+				End If
+			End If
+
+		Else If L.Kind =l.KIND_POINT Then
+			Dim toL As Vec3 = Math3D.SubV(L.Position, p)
+			Dim d2 As Double = Math3D.Dot(toL, toL)
+			If d2 > 1e-9 Then
+				Dim d As Double = Sqrt(d2)
+				Dim wi As Vec3 = Math3D.Mul(toL, 1 / d)
+				Dim lam As Double = Math3D.Dot(n, wi)
+				If lam > 0 Then
+					Dim sray As Ray
+					sray.Origin = Math3D.AddV(p, Math3D.Mul(n, RT_Eps))
+					sray.Dir = wi
+					If AnyHitShadow_BVH(sray, RT_Verts, RT_Faces, RT_Eps) = False Then
+						Dim invr2 As Double = 1 / d2
+						sum = Math3D.AddV(sum, Math3D.V3(E.X * base.X * lam * invr2 / cPI, E.Y * base.Y * lam * invr2 / cPI, E.Z * base.Z * lam * invr2 / cPI))
+					End If
+				End If
+			End If
+
+		Else If L.Kind = L.KIND_RECT Then
+			' single sample per bounce (good variance with path tracing)
+			Dim nL As Vec3 = L.Normal
+			Dim area As Double = L.Area
+			If area > 0 Then
+				Dim u1 As Double = RNGNext01(seed)
+				Dim u2 As Double = RNGNext01(seed)
+				Dim xL As Vec3 = SampleRect(L, u1, u2)
+
+				Dim toL As Vec3 = Math3D.SubV(xL, p)
+				Dim d2 As Double = Math3D.Dot(toL, toL)
+				If d2 > 1e-9 Then
+					Dim d As Double = Sqrt(d2)
+					Dim wi As Vec3 = Math3D.Mul(toL, 1 / d)
+					Dim lamS As Double = Math3D.Dot(n, wi)
+					If lamS > 0 Then
+						Dim lamL As Double = Math3D.Dot(nL, Math3D.Mul(wi, -1))
+						If lamL > 0 Then
+							Dim sray As Ray
+							sray.Origin = Math3D.AddV(p, Math3D.Mul(n, RT_Eps))
+							sray.Dir = wi
+							If AnyHitShadow_BVH(sray, RT_Verts, RT_Faces, RT_Eps) = False Then
+								Dim geom As Double = lamS * lamL * area / d2
+								sum = Math3D.AddV(sum, Math3D.V3(E.X * base.X * geom / cPI, E.Y * base.Y * geom / cPI, E.Z * base.Z * geom / cPI))
+							End If
+						End If
+					End If
+				End If
+			End If
+
+		Else If L.Kind = l.KIND_SPOT Then
+			Dim toL As Vec3 = Math3D.SubV(L.Position, p)
+			Dim d2 As Double = Math3D.Dot(toL, toL)
+			If d2 > 1e-9 Then
+				Dim d As Double = Sqrt(d2)
+				Dim wi As Vec3 = Math3D.Mul(toL, 1 / d)
+				Dim lam As Double = Math3D.Dot(n, wi)
+				If lam > 0 Then
+					Dim spotCos As Double = Math3D.Dot(Math3D.Normalize(Math3D.Mul(L.Direction, -1)), wi)
+					If spotCos > L.CosOuter Then
+						Dim t As Double
+						If spotCos >= L.CosInner Then
+							t = 1
+						Else
+							Dim s As Double = (spotCos - L.CosOuter) / Max(1e-6, (L.CosInner - L.CosOuter))
+							t = s * s * (3 - 2 * s)
+						End If
+						Dim sray As Ray
+						sray.Origin = Math3D.AddV(p, Math3D.Mul(n, RT_Eps))
+						sray.Dir = wi
+						If AnyHitShadow_BVH(sray, RT_Verts, RT_Faces, RT_Eps) = False Then
+							Dim invr2 As Double = 1 / d2
+							sum = Math3D.AddV(sum, Math3D.V3(E.X * base.X * lam * invr2 * t / cPI, E.Y * base.Y * lam * invr2 * t / cPI, E.Z * base.Z * lam * invr2 * t / cPI))
+						End If
+					End If
+				End If
+			End If
+		End If
+	Next
+	Return sum
 End Sub

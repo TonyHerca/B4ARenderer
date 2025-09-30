@@ -158,7 +158,7 @@ Public Sub CreateMaterial(name As String, albedo As Int, reflectivity As Double)
 End Sub
 
 
-Public Sub BuildPreset_CornellBox2
+Public Sub BuildPreset_CornellBox
 	Materials.Initialize
 	Models.Initialize
 	Lights.Initialize
@@ -257,14 +257,14 @@ Public Sub BuildPreset_CornellBox2
 
 	' Rectangular ceiling light (inside box, near y=1.95)
 	Dim L As cLight
-'	L.Initialize(Math3D.v3(-0.5, -1, 0))
-'	L.Name = "CeilingRect"
-'	L.Kind = L.KIND_RECT
-'	L.Color = Colors.RGB(255, 250, 230)      ' warm-ish
-'	L.Intensity = 40.0
-'	L.Position = Math3D.V3(0, 1.95, 0)              ' center
-'	L.U = Math3D.V3(0.25, 0, 0)                     ' half-width along +X/-X
-'	L.V = Math3D.V3(0, 0, 0.18)                     ' half-height along +Z/-Z
+	L.Initialize(Math3D.v3(-0.5, -1, 0))
+	L.Name = "CeilingRect"
+	L.Kind = L.KIND_RECT
+	L.Color = Colors.RGB(255, 250, 230)      ' warm-ish
+	L.Intensity = 40.0
+	L.Position = Math3D.V3(0, 1.95, 0)              ' center
+	L.U = Math3D.V3(0.25, 0, 0)                     ' half-width along +X/-X
+	L.V = Math3D.V3(0, 0, 0.18)                     ' half-height along +Z/-Z
 	Lights.Add(L)
 
 
