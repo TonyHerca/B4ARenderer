@@ -49,7 +49,7 @@ public Sub addToParent(parent As Panel)
 	header.AddView(handlePanel, 50%x - 8%x, 1%y, 16%x, 0.5%y)
 	header.AddView(namelabel, 0, 3%y, popoverPanel.Width, 24dip)
 	
-	popoverPanel.AddView(containerPanel, 0, header.Height, popoverPanel.Width, popoverPanel.Height - header.Height)
+	popoverPanel.AddView(containerPanel, 0, header.Height, popoverPanel.Width, popoverPanel.Height/2 - header.Height)
 	
 	popoverPanel.Background = UI.GetDrawable(Colors.White, popoverPanel.Height*0.03)
 	
@@ -135,4 +135,3 @@ End Sub
 public Sub setTitle(str As String)
 	namelabel.Text = str
 End Sub
-	

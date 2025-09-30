@@ -26,7 +26,15 @@ Sub Class_Globals
 	
 	Dim popoverCamSettings As PopoverPanelView
 	Dim popoverRenderSettings As PopoverPanelView
-	Dim popoverObjectsSettings As PopoverPanelView
+	Dim popoverObjectsList As PopoverPanelView
+	Dim popoverObjectSettings As PopoverPanelView
+	
+	Dim edtPosition As EditVec3Field
+	Dim edtRotation As EditVec3Field
+	Dim edtScale As EditVec3Field
+	Dim edtAlbedo As EditVec3Field
+	Dim sldReflect As SliderView
+	Dim btnVisible As ToggleButton
 	
 End Sub
 
@@ -55,19 +63,13 @@ Public Sub build
 	Dim sldCameraFOV As SliderView = AddSliderToPopover(popoverCamSettings, "sldCamFov")
 '	sldCameraFOV.SetValue(Main.Scene.Camera.FOV_Deg.As(Float), True)
 
-	popoverObjectsSettings = CreatePopover("objectSettings")
-
-	'render settings
-'	popoverRenderSettings = CreatePopover("asd")
-'	popoverRenderSettings.Title = "Viewport Settings"
-'	Dim ToggleRenderMode As ButtonToggle
-'	ToggleRenderMode.Initialize(Me, "togRenderMode")
-'	ToggleRenderMode.AddButton("Wireframe", "OFF")
-'	ToggleRenderMode.AddButton("Solid", "ON")
-'	ToggleRenderMode.AddButton("Shaded", "OFF")
-'	ToggleRenderMode.AddToParent(popoverRenderSettings.containerPanel.Panel, 5%x, 2%y, 90%x, 5%y)
-'	popoverRenderSettings.containerPanel.Panel.Height = UI.Bottom(ToggleRenderMode.panelmain)
-
+	popoverObjectsList = CreatePopover("objectsList")
+	popoverObjectSettings = CreatePopover("ObjectSettings")
+	build_PopoverObjectSettings
+	
+'	render settings
+	popoverRenderSettings = CreatePopover("asd")
+	
 	Dim btnCameraSettings As Button
 	btnCameraSettings.Initialize("CamSettings")
 	panelmain.AddView(btnCameraSettings, 4dip, 4dip, 10%x, 10%x)
@@ -153,32 +155,14 @@ Public Sub build
 '   threads used?
 '	light bounces
 '	show hide object
-	
-'	btnChangeRanderMode.Initialize("btnChange")
-'	Dim btnwid As Int = joystickLook.pnl.left - UI.Right(joystickMove.pnl) - BigSpaceing*2
-'	
-'	panelmain.AddView(btnChangeRanderMode, UI.Right(joystickMove.pnl) + BigSpaceing, joystickMove.pnl.Top, btnwid, joystickMove.pnl.Height)
-'	btnChangeRanderMode.Tag = 0
-	
+
 End Sub
 
 Public Sub CamSettings_click
 	If Not(popoverCamSettings.panelmain.Visible) Then
 		popoverCamSettings.ShowPanel
 	End If
-	
 End Sub
-
-Sub btnChange_Click
-
-	If Main.Timer.Enabled Then
-		Main.Timer.Enabled = False
-		CallSub(Main, "btnRaytrace_Click")
-	Else 
-		Main.Timer.Enabled = True
-	End If
-End Sub
-
 
 Sub JSMove_ValueChanged(Data As Map)
 	gJoyXMove = Data.Get("X")     ' -1..1 (left..right)
@@ -206,8 +190,8 @@ Sub sldCamFov_ValueChanged(m As Map)
 End Sub
 
 Sub RenderWire_Click
-	If Not(popoverObjectsSettings.panelmain.Visible) Then
-		popoverObjectsSettings.ShowPanel
+	If Not(popoverObjectsList.panelmain.Visible) Then
+		popoverObjectsList.ShowPanel
 	End If
 End Sub
 
@@ -235,8 +219,6 @@ Sub enableBVH_Click
 		Sender.As(Button).Color = Colors.Red
 	End If
 	CallSub(Main, "resetTimer")
-	
-'	
 End Sub
 
 Sub renderPathTrace_Click
@@ -274,16 +256,107 @@ public Sub AddModelBarToPopover(popover As PopoverPanelView, event As String) As
 End Sub
 
 public Sub refreshObjectPopover
-	popoverObjectsSettings.containerPanel.Panel.RemoveAllViews
+	popoverObjectsList.containerPanel.Panel.RemoveAllViews
 	For Each obj As cModel In Main.Scene.Models
-		Dim model As ModelBar = AddModelBarToPopover(popoverObjectsSettings, "objSettings")
+		Dim model As ModelBar = AddModelBarToPopover(popoverObjectsList, "objectsList")
 		model.Title = obj.mesh.Name
 		model.Tag = obj
 	Next
 End Sub
 
-public Sub objSettings_VisibilityChanged(visible As Boolean)
+public Sub objectsList_VisibilityChanged(visible As Boolean)
 	Dim modelB As ModelBar = Sender
 	modelB.Tag.As(cModel).Visible = visible
+	CallSub(Main, "resetTimer")
+End Sub
+
+
+
+public Sub objectsList_SettingsClick
+	Dim modelB As ModelBar = Sender
+	ApplyObjectDataToPopover(modelB.Tag)
+	popoverObjectSettings.ShowPanel
+End Sub
+
+public Sub build_PopoverRenderSettings
+	popoverRenderSettings.Title = "Viewport Settings"
+End Sub
+
+public Sub build_PopoverObjectSettings
+	popoverObjectSettings.Title = "Object Data"
+	
+	edtPosition.Initialize(Me, "edtPos")
+	edtPosition.AddToParent(popoverObjectSettings.containerPanel.Panel, 0, 0, popoverObjectSettings.containerPanel.Width)
+	edtPosition.Title = "Position"
+	
+	edtRotation.Initialize(Me, "edtRot")
+	edtRotation.AddToParent(popoverObjectSettings.containerPanel.Panel, 0, UI.Bottom(edtPosition.panelmain), popoverObjectSettings.containerPanel.Width)
+	edtRotation.Title = "Rotation"
+	
+	edtScale.Initialize(Me, "edtScl")
+	edtScale.AddToParent(popoverObjectSettings.containerPanel.Panel, 0, UI.Bottom(edtRotation.panelmain), popoverObjectSettings.containerPanel.Width)
+	edtScale.Title = "Scale"
+	
+	edtAlbedo.Initialize(Me, "edtAlbd")
+	edtAlbedo.AddToParent(popoverObjectSettings.containerPanel.Panel, 0, UI.Bottom(edtScale.panelmain), popoverObjectSettings.containerPanel.Width)
+	edtAlbedo.Title = "Albedo"
+	
+	sldReflect.Initialize(Me, "sldRefl")
+	sldReflect.AddToParent(popoverObjectSettings.containerPanel.Panel, 0, UI.Bottom(edtAlbedo.panelmain), popoverObjectSettings.containerPanel.Width, 80dip)
+	sldReflect.Title = "Reflectiveness"
+	
+	btnVisible.Initialize("btnVis")
+	popoverObjectSettings.containerPanel.Panel.AddView(btnVisible, 0, UI.Bottom(sldReflect.panelmain), popoverObjectSettings.containerPanel.Width, 40dip)
+	
+	popoverObjectSettings.containerPanel.Panel.Height = UI.Bottom(btnVisible)
+End Sub
+
+Public Sub ApplyObjectDataToPopover(model As cModel)
+	edtPosition.SetVectorValues(model.Position)
+	edtRotation.SetVectorValues(model.Rotation)
+	Dim scale As Vec3 = Math3D.V3(model.Scale, model.Scale, model.Scale) : edtRotation.SetVectorValues(scale) ' temp for now while scale is a bool
+	edtAlbedo.SetVectorValues(Math3D.IntToRGB(model.Material.Albedo))
+	sldReflect.SetRange(0, 1) : sldReflect.SetValue(model.Material.Reflectivity, False)
+	btnVisible.Enabled = False ' prevent the event triggering here
+	btnVisible.Checked = model.Visible
+	btnVisible.Enabled = True
+	
+	edtPosition.Tag = model
+	edtRotation.Tag = model
+	edtScale.Tag = model
+	edtAlbedo.Tag = model
+	sldReflect.Tag = model
+	btnVisible.Tag = model
+End Sub
+
+public Sub edtPos(value As Vec3)
+	Sender.As(EditVec3Field).Tag.As(cModel).Position = value
+	CallSub(Main, "resetTimer")
+End Sub
+
+public Sub edtRot(value As Vec3)
+	Sender.As(EditVec3Field).Tag.As(cModel).Rotation = value
+	CallSub(Main, "resetTimer")
+End Sub
+
+public Sub edtScl(value As Vec3)
+	Sender.As(EditVec3Field).Tag.As(cModel).Scale = value.x
+	CallSub(Main, "resetTimer")
+End Sub
+
+public Sub edtAlbd(value As Vec3)
+	Sender.As(EditVec3Field).Tag.As(cModel).Material.Albedo = Math3D.ARGB255(255, value.X, value.Y, value.Z)
+	CallSub(Main, "resetTimer")
+End Sub
+
+public Sub sldRefl_ValueChanged(m As Map)
+	Dim value As Float = m.Get("Norm")
+	Sender.As(SliderView).Tag.As(cModel).Material.Reflectivity = value
+	CallSub(Main, "resetTimer")
+End Sub
+
+public Sub btnVis_CheckedChange(Checked As Boolean)
+	If Not(Sender.As(ToggleButton).Enabled) Then Return
+	Sender.As(ToggleButton).Tag.As(cModel).Visible = Checked
 	CallSub(Main, "resetTimer")
 End Sub

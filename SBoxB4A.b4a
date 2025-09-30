@@ -186,7 +186,7 @@ End Sub
 Public Sub pathtrace
 	Timer.Enabled = False
 	Log("START == PathTrace")
-	Dim bmp As Bitmap = Renderer.RenderPathTrace(Scene, pnl.Width, pnl.Height, 1, 3)   ' spp=1, maxBounces=3
+	Dim bmp As Bitmap = Renderer.RenderPathTrace(Scene, pnl.Width, pnl.Height, 2, 3)   ' spp=1, maxBounces=3
 	cvs.DrawColor(Colors.Black)
 	Dim dst As Rect : dst.Initialize(0, 0, pnl.Width, pnl.Height)
 	cvs.DrawBitmap(bmp, Null, dst)

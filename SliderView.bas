@@ -40,6 +40,7 @@ Sub Class_Globals
 	Private colThumbRing As Int    = 0xFFFFFFFF
 	Private colText As Int         = 0xFF212121
 	
+	Public Tag As Object
 	'Geometry
 '	Private headerH As Int = 30dip   ' <- was 36dip
 
@@ -101,12 +102,12 @@ End Sub
 
 
 '------------- Public API -------------
-Public Sub SetTitle(t As String)
+Public Sub setTitle(t As String)
 	lbl.Text = t
 	Redraw
 End Sub
 
-Public Sub GetTitle As String
+Public Sub getTitle As String
 	Return lbl.Text
 End Sub
 

@@ -20,6 +20,8 @@ Sub Class_Globals
 	
 	Public Callback As Object
 	Public EventName As String
+	
+	Public Tag As Object
 End Sub
 
 'Initializes the object. You can add parameters to this method if needed.
