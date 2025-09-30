@@ -156,3 +156,143 @@ Public Sub CreateMaterial(name As String, albedo As Int, reflectivity As Double)
 	newMaterial.id = AddMaterial(newMaterial)
 	Return newMaterial
 End Sub
+
+
+Public Sub BuildPreset_CornellBox2
+	Materials.Initialize
+	Models.Initialize
+	Lights.Initialize
+
+	' Materials
+	Dim mWhite As cMaterial
+	mWhite.Initialize("White")
+	mWhite.Albedo = Colors.RGB(200,200,200)
+	mWhite.Reflectivity = 0
+	mWhite.id = AddMaterial(mWhite)
+
+	Dim mRed As cMaterial
+	mRed.Initialize("Red")
+	mRed.Albedo = Colors.RGB(200,40,40)
+	mRed.Reflectivity = 0
+	mRed.id = AddMaterial(mRed)
+
+	Dim mGreen As cMaterial
+	mGreen.Initialize("Green")
+	mGreen.Albedo = Colors.RGB(40,180,40)
+	mGreen.Reflectivity = 0
+	mGreen.id = AddMaterial(mGreen)
+
+	Dim mMirror As cMaterial
+	mMirror.Initialize("Mirror")
+	mMirror.Albedo = Colors.RGB(230,230,230)
+	mMirror.Reflectivity = 0.6
+	mMirror.id = AddMaterial(mMirror)
+
+	' Room (no front wall), box from x∈[-1,1], y∈[0,2], z∈[-1,1]
+	Dim meshFloor As cMesh
+	meshFloor.Initialize("meshFloor")
+	meshFloor.BuildPlaneXZ(2, 2, 0, 1, 1, 0)
+	meshFloor.ReverseWindingAll
+	meshFloor.RecalcFaceNormals
+	meshFloor.RecalcVertexNormals
+	meshFloor.ComputeCornerNormalsSeamAware(1, 0.000001)
+	Dim mdlFloor As cModel = CreateModel("meshFloor", meshFloor, CopyMaterial(mWhite, mWhite.Name & "_Copy", True))
+	mdlFloor.SetTRS(Math3D.V3(0,0,0), Math3D.V3(0,0,0), 1)
+	AddModel(mdlFloor)
+	
+	Dim meshCeil As cMesh
+	meshCeil.Initialize("meshCeiling")
+	meshCeil.BuildPlaneXZ(2, 2, 2, 1, 1, 0)
+	'    meshCeil.ReverseWindingAll
+	meshCeil.RecalcFaceNormals
+	meshCeil.RecalcVertexNormals
+	meshCeil.ComputeCornerNormalsSeamAware(1, 0.000001)
+	Dim mdlCeiling As cModel = CreateModel("meshCeiling", meshCeil, CopyMaterial(mWhite, mWhite.Name & "_Copy2", True))
+	mdlCeiling.SetTRS(Math3D.V3(0,0,0), Math3D.V3(0,0,0), 1)
+'	AddModel(mdlCeiling)
+
+	Dim back As cMesh
+	back.Initialize("Back")
+	back.BuildPlaneXY(2, 2, -1, 1, 1, 0)
+	back.ComputeCornerNormalsSeamAware(1, 0.000001)
+	Dim mdlBack As cModel = CreateModel("Back", back, CopyMaterial(mWhite, mWhite.Name & "_Copy3", True))
+	mdlBack.SetTRS(Math3D.V3(0,1,0), Math3D.V3(0,0,0), 1)
+	AddModel(mdlBack)
+	
+	Dim leftw As cMesh
+	leftw.Initialize("Left")
+	leftw.BuildPlaneYZ(2, 2, -1, 1, 1, 0)
+	leftw.ComputeCornerNormalsSeamAware(1, 0.000001)
+	Dim mdlLeft As cModel = CreateModel("Left", leftw, mRed)
+	mdlLeft.SetTRS(Math3D.V3(0,1,0), Math3D.V3(0,0,0), 1)
+	AddModel(mdlLeft)
+	
+	Dim rightw As cMesh
+	rightw.Initialize("Right")
+	rightw.BuildPlaneYZ(2, 2, 1, 1, 1, 0)
+	rightw.ReverseWindingAll
+	rightw.RecalcFaceNormals
+	rightw.RecalcVertexNormals
+	rightw.ComputeCornerNormalsSeamAware(1, 0.000001)
+	Dim mdlRight As cModel = CreateModel("Right", rightw, mGreen)
+	mdlRight.SetTRS(Math3D.V3(0,1,0), Math3D.V3(0,0,0), 1)
+	AddModel(mdlRight)
+	' Objects
+	Dim s1 As cMesh
+	s1.Initialize("SphereWhite")
+	s1.BuildUVSphere(0.35, 32, 16, mWhite.id)
+	s1.ComputeCornerNormalsSeamAware(80, 0.000001)
+	CreateModel("BallWhite", s1, mWhite)
+	Dim mdlBallWhite As cModel = CreateModel("BallWhite", s1, mWhite)
+	mdlBallWhite.SetTRS(Math3D.V3(-0.4, 0.35, -0.3), Math3D.V3(0,0,0), 1)
+	AddModel(mdlBallWhite)
+
+	Dim s2 As cMesh
+	s2.Initialize("SphereMirror")
+	s2.BuildUVSphere(0.35, 32, 16, mMirror.id)
+	s2.ComputeCornerNormalsSeamAware(80, 0.000001)
+	Dim mdlBallMirror As cModel = CreateModel("BallMirror", s2, mMirror)
+	mdlBallMirror.SetTRS(Math3D.V3(0.45, 0.35, 0.2), Math3D.V3(0,0,0), 1)
+	AddModel(mdlBallMirror)
+
+	' Rectangular ceiling light (inside box, near y=1.95)
+	Dim L As cLight
+'	L.Initialize(Math3D.v3(-0.5, -1, 0))
+'	L.Name = "CeilingRect"
+'	L.Kind = L.KIND_RECT
+'	L.Color = Colors.RGB(255, 250, 230)      ' warm-ish
+'	L.Intensity = 40.0
+'	L.Position = Math3D.V3(0, 1.95, 0)              ' center
+'	L.U = Math3D.V3(0.25, 0, 0)                     ' half-width along +X/-X
+'	L.V = Math3D.V3(0, 0, 0.18)                     ' half-height along +Z/-Z
+	Lights.Add(L)
+
+
+	' Camera
+	Camera.Pos = Math3D.V3(0, 1.0, 2.8)
+	Camera.Target = Math3D.V3(0, 1.0, 0)
+	Camera.Up = Math3D.V3(0, 1, 0)
+	Camera.FOV_Deg = 45
+End Sub
+
+public Sub CopyMaterial(material As cMaterial, newName As String, addToList As Boolean) As cMaterial
+	Dim newMaterial As cMaterial
+	newMaterial.Initialize(newName) 'Todo : AutoGenerate name like "_Copy", "_Copy(1)", "_Copy(2)" | Scan mats list and get names etc
+'									 TOdo : maybe also track materials users like how many models use the same material / mesh also
+	newMaterial.Albedo = material.Albedo
+	newMaterial.Reflectivity = material.Reflectivity
+	If addToList Then newMaterial.id = AddMaterial(newMaterial)
+	Return newMaterial
+End Sub
+
+public Sub CopyMesh(mesh As cMesh, newName As String) As cMesh
+	Dim newMesh As cMesh : newMesh.Initialize(newName)
+	newMesh.creaseDegs = mesh.creaseDegs
+	newMesh.CornerN = Math3D.CopyList(mesh.CornerN) : newMesh.VertN = Math3D.CopyList(mesh.VertN)
+	newMesh.Verts = Math3D.CopyList(mesh.Verts) : newMesh.FaceMat = Math3D.CopyList(mesh.FaceMat)
+	newMesh.FaceN = Math3D.CopyList(mesh.FaceN) : newMesh.Faces = Math3D.CopyList(mesh.Faces)
+	newMesh.Position = Math3D.CopyVec3(mesh.Position) : newMesh.Rotation = Math3D.CopyVec3(mesh.Rotation)
+	newMesh.Scale = mesh.Scale
+	newMesh.MinY = mesh.MinY : newMesh.MaxY = mesh.MaxY
+	Return newMesh
+End Sub

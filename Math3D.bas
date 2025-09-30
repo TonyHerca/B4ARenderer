@@ -84,3 +84,17 @@ public Sub AxisRotate(v As Vec3, axis As Vec3, ang As Double) As Vec3
 	Dim term3 As Vec3 = Mul(axis, (1 - c) * dotva)
 	Return AddV(AddV(term1, term2), term3)
 End Sub
+
+public Sub CopyList(l As List) As List
+	Dim newList As List
+	newList.Initialize
+	newList.AddAll(l)
+	Return newList
+End Sub
+
+public Sub CopyVec3(v As Vec3) As Vec3
+	Dim newV As Vec3
+	newV.Initialize
+	newV.X = v.X : newV.Y = v.Y : newV.Z = v.Z
+	Return newV
+End Sub
