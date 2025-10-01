@@ -69,20 +69,11 @@ Public Sub build
 	
 '	render settings
 	popoverRenderSettings = CreatePopover("asd")
-	
-	Dim btnCameraSettings As Button
-	btnCameraSettings.Initialize("CamSettings")
-	panelmain.AddView(btnCameraSettings, 4dip, 4dip, 10%x, 10%x)
-	btnCameraSettings.Background = UI.GetDrawable(Colors.White, btnCameraSettings.Height)
-	btnCameraSettings.Text = "C" ' todo make panel with button and label and camera icon
-	btnCameraSettings.Padding = Array As Int(0, 0, 0, 0)
-	btnCameraSettings.TextSize = 30
-	btnCameraSettings.Typeface = Typeface.DEFAULT_BOLD
-	
+	popoverCamSettings.panelmain.BringToFront 'for now popover is separate, should become a layout in objSettings maybe
 	
 	Dim btnRenderWire As Button
 	btnRenderWire.Initialize("RenderWire")
-	panelmain.AddView(btnRenderWire, UI.Right(btnCameraSettings) + 4dip, 4dip, 10%x, 10%x)
+	panelmain.AddView(btnRenderWire, 4dip, 4dip, 10%x, 10%x)
 	btnRenderWire.Background = UI.GetDrawable(Colors.White, btnRenderWire.Height)
 	btnRenderWire.Text = "W" ' todo make panel with button and label and camera icon
 	btnRenderWire.Padding = Array As Int(0, 0, 0, 0)
@@ -156,12 +147,6 @@ Public Sub build
 '	light bounces
 '	show hide object
 
-End Sub
-
-Public Sub CamSettings_click
-	If Not(popoverCamSettings.panelmain.Visible) Then
-		popoverCamSettings.ShowPanel
-	End If
 End Sub
 
 Sub JSMove_ValueChanged(Data As Map)
