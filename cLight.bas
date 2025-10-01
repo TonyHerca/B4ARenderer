@@ -17,6 +17,7 @@ Sub Class_Globals
 	Public Color As Int = Colors.White
 	Public Intensity As Double = 1.0
 	Public Position As Vec3      ' position for point/spot/rect
+	Public Enabled As Boolean = True
 	
 	Public CosInner As Double = Cos(15 * cPI / 180)
 	Public CosOuter As Double = Cos(20 * cPI / 180)
@@ -31,6 +32,7 @@ Public Sub Initialize(dir As Vec3)
 	Position = Math3D.V3(0, 0, 0)
 	U = Math3D.V3(0, 0, 0)
 	V = Math3D.V3(0, 0, 0)
+	Enabled = True
 End Sub
 
 

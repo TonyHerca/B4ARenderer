@@ -149,14 +149,8 @@ Public Sub RenderRaster(cvs As Canvas, dstW As Int, dstH As Int, scene As cScene
 		Next
 	End If
 
-	' choose light
-	Dim lightDir As Vec3
-	If scene.Lights.Size > 0 Then
-		Dim L As cLight = scene.Lights.Get(0)
-		lightDir = L.Direction
-	Else
-		lightDir = Math3D.V3(-1,-1,-1)
-	End If
+	Dim lightDir As Vec3 = Math3D.V3(-1, -1, -1)
+	
 	Dim Lm As Vec3 = Math3D.Normalize(Math3D.Mul(lightDir, -1))   ' surface->light
 
 	
@@ -333,12 +327,15 @@ Public Sub RenderRaytrace(scene As cScene, Width As Int, Height As Int) As Resum
 	RT_TanHalf = Tan(scene.Camera.FOV_Deg * cPI / 180 / 2)
 	
 	' ---- light ----
-	If scene.Lights.Size > 0 Then
-		Dim L As cLight = scene.Lights.Get(0)
-		RT_LightDir = L.Direction
-	Else
-		RT_LightDir = Math3D.V3(-1, -2, -1)
-	End If
+	RT_LightDir = Math3D.V3(-1, -2, -1)
+	Dim li As Int
+	For li = 0 To scene.Lights.Size - 1
+		Dim L As cLight = scene.Lights.Get(li)
+		If L.Enabled Then
+			RT_LightDir = L.Direction
+			Exit
+		End If
+	Next
 
 	' ---- output buffer ----
 	Pixels = Math3D.CreateIntArray(RT_W * RT_H)
@@ -1107,11 +1104,15 @@ Public Sub RenderPathTrace(scene As cScene, dstW As Int, dstH As Int, spp As Int
 	' Light (directional) from scene
 	Dim haveLight As Boolean = False
 	Dim Ldir As Vec3 = Math3D.V3(-1, -1, -1)
-	If scene.Lights.Size > 0 Then
-		Dim L As cLight = scene.Lights.Get(0)
-		Ldir = L.Direction
-		haveLight = True
-	End If
+	Dim li As Int
+	For li = 0 To scene.Lights.Size - 1
+		Dim L As cLight = scene.Lights.Get(li)
+		If L.Enabled Then
+			Ldir = L.Direction
+			haveLight = True
+			Exit
+		End If
+	Next
 	Dim LightToSurf As Vec3 = Math3D.Normalize(Math3D.Mul(Ldir, -1))  ' points from surface toward light
 
 	EnsurePathBuffers(dstW, dstH)
@@ -1341,6 +1342,7 @@ Private Sub RT_DirectLight(p As Vec3, n As Vec3, base As Vec3, faceIndex As Int)
 	Dim i As Int
 	For i = 0 To RT_Scene.Lights.Size - 1
 		Dim L As cLight = RT_Scene.Lights.Get(i)
+		If L.Enabled = False Then Continue
 		Dim E As Vec3 = LightRGB(L)
 
 		If L.Kind = l.KIND_DIRECTIONAL Then
@@ -1467,6 +1469,7 @@ Private Sub PT_DirectLight(p As Vec3, n As Vec3, base As Vec3, seed As Int, scen
 	Dim i As Int
 	For i = 0 To scene.Lights.Size - 1
 		Dim L As cLight = scene.Lights.Get(i)
+		If L.Enabled = False Then Continue
 		Dim E As Vec3 = LightRGB(L)
 
 		If L.Kind = l.KIND_DIRECTIONAL Then

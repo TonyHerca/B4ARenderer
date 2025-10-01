@@ -30,7 +30,8 @@ Sub Class_Globals
 	' State
 	Private mTitle As String
 	Private mShown As Boolean = True
-	Public Tag As Object ' optional: store your scene object id/ref here
+	Public Tag As Object
+	Private ToggleEnabled As Boolean = True
 
 	' Optional bitmaps for nicer icons
 	Private BmpSettings As Bitmap
@@ -116,6 +117,24 @@ Public Sub SetShown(shown As Boolean)
 	RaiseVisibilityChanged
 End Sub
 
+Public Sub SetShownWithoutEvent(shown As Boolean)
+	If mShown = shown Then Return
+	mShown = shown
+	UpdateEyeIcon
+End Sub
+
+Public Sub SetToggleEnabled(enabled As Boolean)
+	ToggleEnabled = enabled
+	BtnEye.Enabled = enabled
+	FallbackEye.Enabled = enabled
+	BtnEye.Visible = enabled
+	FallbackEye.Visible = enabled
+	If enabled = False Then
+		SetShownWithoutEvent(True)
+	End If
+	Relayout
+End Sub
+
 Public Sub IsShown As Boolean
 	Return mShown
 End Sub
@@ -152,10 +171,14 @@ Private Sub Relayout
 	Dim rightX As Int = w - Pad
 
 	' Eye
-	BtnEye.SetLayoutAnimated(0, rightX - IconSize, (h - IconSize) / 2, IconSize, IconSize)
-	FallbackEye.SetLayoutAnimated(0, BtnEye.Left, BtnEye.Top, IconSize, IconSize)
-	rightX = BtnEye.Left - Gap
-
+	If ToggleEnabled Then
+		BtnEye.SetLayoutAnimated(0, rightX - IconSize, (h - IconSize) / 2, IconSize, IconSize)
+		FallbackEye.SetLayoutAnimated(0, BtnEye.Left, BtnEye.Top, IconSize, IconSize)
+		rightX = BtnEye.Left - Gap
+	Else
+		BtnEye.SetLayoutAnimated(0, rightX, (h - IconSize) / 2, 0, IconSize)
+		FallbackEye.SetLayoutAnimated(0, rightX, (h - IconSize) / 2, 0, IconSize)
+	End If
 	' Settings
 	BtnSettings.SetLayoutAnimated(0, rightX - IconSize, (h - IconSize) / 2, IconSize, IconSize)
 	FallbackSettings.SetLayoutAnimated(0, BtnSettings.Left, BtnSettings.Top, IconSize, IconSize)
@@ -213,6 +236,7 @@ End Sub
 ' Interaction -----
 
 Private Sub btnEye_Click
+	If ToggleEnabled = False Then Return
 	mShown = Not(mShown)
 	UpdateEyeIcon
 	RaiseVisibilityChanged

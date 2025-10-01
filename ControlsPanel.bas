@@ -256,26 +256,78 @@ public Sub AddModelBarToPopover(popover As PopoverPanelView, event As String) As
 End Sub
 
 public Sub refreshObjectPopover
-	popoverObjectsList.containerPanel.Panel.RemoveAllViews
+	Dim container As Panel = popoverObjectsList.containerPanel.Panel
+	container.RemoveAllViews
+	container.Height = 0
+
+	Dim cameraBar As ModelBar = AddModelBarToPopover(popoverObjectsList, "objectsList")
+	cameraBar.Title = "Camera"
+	cameraBar.Tag = CreateMap("type": "camera", "ref": Main.Scene.Camera)
+	cameraBar.SetToggleEnabled(False)
+
+	Dim lightIndex As Int
+	For lightIndex = 0 To Main.Scene.Lights.Size - 1
+		Dim light As cLight = Main.Scene.Lights.Get(lightIndex)
+		Dim lightBar As ModelBar = AddModelBarToPopover(popoverObjectsList, "objectsList")
+		Dim lightName As String = light.Name
+		If lightName.Length = 0 Then lightName = $"Light ${lightIndex + 1}"$
+		lightBar.Title = lightName
+		lightBar.Tag = CreateMap("type": "light", "ref": light)
+		lightBar.SetShownWithoutEvent(light.Enabled)
+	Next
+
 	For Each obj As cModel In Main.Scene.Models
 		Dim model As ModelBar = AddModelBarToPopover(popoverObjectsList, "objectsList")
 		model.Title = obj.mesh.Name
-		model.Tag = obj
+		model.Tag = CreateMap("type": "model", "ref": obj)
+		model.SetShownWithoutEvent(obj.Visible)
 	Next
 End Sub
 
 public Sub objectsList_VisibilityChanged(visible As Boolean)
 	Dim modelB As ModelBar = Sender
-	modelB.Tag.As(cModel).Visible = visible
+	Dim tagData As Object = modelB.Tag
+
+	If tagData Is Map Then
+		Dim data As Map = tagData
+		Dim entryType As String = data.Get("type")
+		Select entryType
+			Case "model"
+				Dim mdl As cModel = data.Get("ref")
+				mdl.Visible = visible
+			Case "light"
+				Dim light As cLight = data.Get("ref")
+				light.Enabled = visible
+			Case "camera"
+				Return
+		End Select
+	Else If tagData Is cModel Then
+		tagData.As(cModel).Visible = visible
+	End If
+
 	CallSub(Main, "resetTimer")
 End Sub
 
-
-
 public Sub objectsList_SettingsClick
 	Dim modelB As ModelBar = Sender
-	ApplyObjectDataToPopover(modelB.Tag)
-	popoverObjectSettings.ShowPanel
+	Dim tagData As Object = modelB.Tag
+
+	If tagData Is Map Then
+		Dim data As Map = tagData
+		Dim entryType As String = data.Get("type")
+		Select entryType
+			Case "model"
+				Dim mdl As cModel = data.Get("ref")
+				ApplyObjectDataToPopover(mdl)
+				popoverObjectSettings.ShowPanel
+			Case "camera"
+				popoverCamSettings.ShowPanel
+		End Select
+		Return
+	Else If tagData Is cModel Then
+		ApplyObjectDataToPopover(tagData)
+		popoverObjectSettings.ShowPanel
+	End If
 End Sub
 
 public Sub build_PopoverRenderSettings
