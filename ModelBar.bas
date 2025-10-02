@@ -16,14 +16,17 @@ Sub Class_Globals
 	Private LblName As Label
 	Private BtnSettings As ImageView
 	Private BtnEye As ImageView
+	Private ImgType As ImageView
 
 	' Fallback text “icons” if bitmaps not provided
 	Private FallbackSettings As Label
 	Private FallbackEye As Label
+	Private FallbackType As Label
 
 	' Layout metrics
 	Private Pad As Int = 10dip
 	Private IconSize As Int = 22dip
+	Private TypeIconSize As Int = 22dip
 	Private RowHeight As Int = 48dip
 	Private Gap As Int = 8dip
 
@@ -37,7 +40,7 @@ Sub Class_Globals
 	Private BmpSettings As Bitmap
 	Private BmpEyeOpen As Bitmap
 	Private BmpEyeClosed As Bitmap
-
+	Private BmpType As Bitmap
 	' Colors
 	Private ColorBg As Int = Colors.White
 	Private ColorText As Int = Colors.Black
@@ -46,6 +49,7 @@ Sub Class_Globals
 	
 	Dim callback As Object
 	Dim eventname As String
+	Private TypeIconText As String = ""
 End Sub
 
 Public Sub Initialize(cb As Object, event As String)
@@ -62,12 +66,15 @@ Public Sub Initialize(cb As Object, event As String)
 	LblName.TextSize = 16
 	LblName.Gravity = Gravity.CENTER_VERTICAL
 	panelmain.AddView(LblName, 0, 0, 0, 0)
+	LblName.Typeface = Typeface.DEFAULT_BOLD
 
 	' Icon imageviews (may remain empty if we use fallback text)
 	BtnSettings.Initialize("btnSettings")
 	BtnEye.Initialize("btnEye")
+	ImgType.Initialize("")
 	panelmain.AddView(BtnSettings, 0, 0, IconSize, IconSize)
 	panelmain.AddView(BtnEye, 0, 0, IconSize, IconSize)
+	panelmain.AddView(ImgType, 0, 0, TypeIconSize, TypeIconSize)
 
 	' Fallback text icons (hidden when bitmaps are set)
 	FallbackSettings.Initialize("btnSettings")
@@ -83,12 +90,18 @@ Public Sub Initialize(cb As Object, event As String)
 	FallbackEye.TextColor = ColorHint
 	FallbackEye.Gravity = Gravity.CENTER
 	panelmain.AddView(FallbackEye, 0, 0, IconSize, IconSize)
+	FallbackType.Initialize("")
+	FallbackType.TextSize = 18
+	FallbackType.TextColor = ColorHint
+	FallbackType.Gravity = Gravity.CENTER
+	panelmain.AddView(FallbackType, 0, 0, TypeIconSize, TypeIconSize)
 End Sub
 
 ' Add to a parent with bounds (use ScrollView.Panel as parent)
 Public Sub AddToParent(Parent As Panel, Left As Int, Top As Int, Width As Int)
 	Parent.AddView(panelmain, Left, Top, Width, RowHeight)
 	Relayout
+	UpdateTypeIcon
 	UpdateEyeIcon
 End Sub
 
@@ -148,6 +161,7 @@ Public Sub SetColors(Background As Int, Text As Int, Hint As Int)
 	LblName.TextColor = ColorText
 	FallbackSettings.TextColor = ColorHint
 	FallbackEye.TextColor = ColorHint
+	FallbackType.TextColor = ColorHint
 End Sub
 
 Public Sub SetRowHeight(h As Int)
@@ -169,23 +183,35 @@ Private Sub Relayout
 
 	' Right to left: [ .. Label .. ][ Settings ][ Gap ][ Eye ]
 	Dim rightX As Int = w - Pad
+	Dim leftX As Int = Pad
 
 	' Eye
 	If ToggleEnabled Then
-		BtnEye.SetLayoutAnimated(0, rightX - IconSize, (h - IconSize) / 2, IconSize, IconSize)
-		FallbackEye.SetLayoutAnimated(0, BtnEye.Left, BtnEye.Top, IconSize, IconSize)
+		BtnEye.SetLayout(rightX - IconSize, (h - IconSize) / 2, IconSize, IconSize)
+		FallbackEye.SetLayout(BtnEye.Left, BtnEye.Top, IconSize, IconSize)
 		rightX = BtnEye.Left - Gap
 	Else
-		BtnEye.SetLayoutAnimated(0, rightX, (h - IconSize) / 2, 0, IconSize)
-		FallbackEye.SetLayoutAnimated(0, rightX, (h - IconSize) / 2, 0, IconSize)
+		BtnEye.SetLayout(rightX, (h - IconSize) / 2, 0, IconSize)
+		FallbackEye.SetLayout(rightX, (h - IconSize) / 2, 0, IconSize)
 	End If
 	' Settings
-	BtnSettings.SetLayoutAnimated(0, rightX - IconSize, (h - IconSize) / 2, IconSize, IconSize)
-	FallbackSettings.SetLayoutAnimated(0, BtnSettings.Left, BtnSettings.Top, IconSize, IconSize)
+	BtnSettings.SetLayout(rightX - IconSize, (h - IconSize) / 2, IconSize, IconSize)
+	FallbackSettings.SetLayout(BtnSettings.Left, BtnSettings.Top, IconSize, IconSize)
 	rightX = BtnSettings.Left - Gap
 
+	' Type icon on the left
+	Dim hasTypeIcon As Boolean = BmpType.IsInitialized Or TypeIconText.Length > 0
+	If hasTypeIcon Then
+		ImgType.SetLayout(leftX, (h - TypeIconSize) / 2, TypeIconSize, TypeIconSize)
+		FallbackType.SetLayout(ImgType.Left, ImgType.Top, TypeIconSize, TypeIconSize)
+		leftX = ImgType.Left + TypeIconSize + Gap
+	Else
+		ImgType.SetLayout(leftX, (h - TypeIconSize) / 2, 0, TypeIconSize)
+		FallbackType.SetLayout(ImgType.Left, ImgType.Top, 0, TypeIconSize)
+	End If
+	
 	' Label fills remaining space
-	LblName.SetLayoutAnimated(0, Pad, 0, rightX - Pad, h)
+	LblName.SetLayout(Pad*2 + IconSize, 0, rightX - Pad, h)
 End Sub
 
 Private Sub ApplyIconBitmaps
@@ -200,6 +226,46 @@ Private Sub ApplyIconBitmaps
 
 	FallbackSettings.Visible = Not(useImgs)
 	FallbackEye.Visible = Not(useImgs)
+End Sub
+
+
+Private Sub UpdateTypeIcon
+	Dim hasBitmap As Boolean = BmpType.IsInitialized
+	Dim hasText As Boolean = TypeIconText.Length > 0
+
+	If hasBitmap Then
+		ImgType.Bitmap = BmpType
+	End If
+
+	ImgType.Visible = hasBitmap
+	FallbackType.Visible = Not(hasBitmap) And hasText
+
+	If hasText Then
+		FallbackType.Text = TypeIconText
+	End If
+
+	Relayout
+End Sub
+
+Public Sub SetTypeIconBitmap(icon As Bitmap)
+	If icon.IsInitialized Then
+		BmpType = icon
+	Else
+		BmpType = Null
+	End If
+	UpdateTypeIcon
+End Sub
+
+Public Sub setTypeIcon(t As String)
+	TypeIconText = t
+	If t.Length = 0 Then
+		BmpType = Null
+	End If
+	UpdateTypeIcon
+End Sub
+
+Public Sub getTypeIcon As String
+	Return TypeIconText
 End Sub
 
 Private Sub UpdateEyeIcon

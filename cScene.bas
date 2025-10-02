@@ -34,31 +34,6 @@ Public Sub Initialize
 	' default material 0
 	Dim M0 As cMaterial : M0.Initialize("Default") : Materials.Add(M0)
 	
-'	' build floor + wall
-'	FloorMesh.Initialize("Floor")
-'	FloorMesh.AddCube(0, 0) ' just to init arrays; we'll override verts/faces next
-'	FloorMesh.Verts.Clear : FloorMesh.Faces.Clear : FloorMesh.FaceN.Clear : FloorMesh.FaceMat.Clear
-'	
-'	' floor quad [-5..5]x[-5..3] at y=0
-'	Dim x0=-5, x1=5, z0=-5, z1=3 As Double
-'	FloorMesh.Verts.AddAll(Array As Object( _
-'	Math3D.V3(x0,0,z0), Math3D.V3(x1,0,z0), Math3D.V3(x1,0,z1), Math3D.V3(x0,0,z1)))
-'	FloorMesh.Faces.Add(Math3D.F3(0,1,2)) : FloorMesh.FaceMat.Add(0)
-'	FloorMesh.Faces.Add(Math3D.F3(0,2,3)) : FloorMesh.FaceMat.Add(0)
-'	FloorMesh.RecalcFaceNormals
-'	Meshes.put(FloorMesh.Name, FloorMesh)
-'	
-'	' wall at z=-3, x in [-5..5], y in [0..5]
-'	WallMesh.Initialize("BackWall")
-'	WallMesh.Verts.AddAll(Array As Object( _
-'        Math3D.V3(x0,0,-3), Math3D.V3(x1,0,-3), Math3D.V3(x1,5,-3), Math3D.V3(x0,5,-3)))
-'	WallMesh.Faces.Add(Math3D.F3(0,2,1)) : WallMesh.FaceMat.Add(0)
-'	WallMesh.Faces.Add(Math3D.F3(0,3,2)) : WallMesh.FaceMat.Add(0)
-'	WallMesh.RecalcFaceNormals
-'	Meshes.Put(WallMesh.Name, WallMesh)
-'	
-'	FloorMesh.EnsureFacing(Math3D.V3(0, 1, 0))
-'	WallMesh.EnsureFacing(Math3D.V3(0, 0, 1))
 End Sub
 
 Public Sub AddMesh(m As cMesh)

@@ -247,6 +247,7 @@ public Sub refreshObjectPopover
 
 	Dim cameraBar As ModelBar = AddModelBarToPopover(popoverObjectsList, "objectsList")
 	cameraBar.Title = "Camera"
+	cameraBar.TypeIcon = "📷"
 	cameraBar.Tag = CreateMap("type": "camera", "ref": Main.Scene.Camera)
 	cameraBar.SetToggleEnabled(False)
 
@@ -257,6 +258,7 @@ public Sub refreshObjectPopover
 		Dim lightName As String = light.Name
 		If lightName.Length = 0 Then lightName = $"Light ${lightIndex + 1}"$
 		lightBar.Title = lightName
+		lightBar.TypeIcon = "💡"
 		lightBar.Tag = CreateMap("type": "light", "ref": light)
 		lightBar.SetShownWithoutEvent(light.Enabled)
 	Next
@@ -264,6 +266,7 @@ public Sub refreshObjectPopover
 	For Each obj As cModel In Main.Scene.Models
 		Dim model As ModelBar = AddModelBarToPopover(popoverObjectsList, "objectsList")
 		model.Title = obj.mesh.Name
+		model.TypeIcon = "🧊"
 		model.Tag = CreateMap("type": "model", "ref": obj)
 		model.SetShownWithoutEvent(obj.Visible)
 	Next

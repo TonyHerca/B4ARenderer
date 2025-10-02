@@ -56,9 +56,6 @@ Version=13.4
 Sub Process_Globals
 	' ---------- types ----------
 
-	Public Const MODE_RASTER As Int = 0
-	Public Const MODE_RAYTRACE As Int = 1
-	
 	Dim Timer As Timer
 
 	Dim Renderer As cRenderer
