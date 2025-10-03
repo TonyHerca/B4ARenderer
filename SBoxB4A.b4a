@@ -13,9 +13,10 @@ Library2=gesturedetector
 Library3=javaobject
 Library4=phone
 Library5=rippledrawable
-Library6=threading
-Library7=xui
-Library8=stringutils
+Library6=stringutils
+Library7=threading
+Library8=xui
+Library9=json
 ManifestCode='This code will be applied to the manifest file during compilation.~\n~'You do not need to modify it in most cases.~\n~'See this link for for more information: https://www.b4x.com/forum/showthread.php?p=78136~\n~AddManifestText(~\n~<uses-sdk android:minSdkVersion="21" android:targetSdkVersion="35"/>~\n~<supports-screens android:largeScreens="true" ~\n~    android:normalScreens="true" ~\n~    android:smallScreens="true" ~\n~    android:anyDensity="true"/>)~\n~SetApplicationAttribute(android:icon, "@drawable/icon")~\n~SetApplicationAttribute(android:label, "$LABEL$")~\n~CreateResourceFromFile(Macro, Themes.LightTheme)~\n~'End of default text.~\n~SetApplicationAttribute(android:hardwareAccelerated, "true")
 Module1=ButtonToggle
 Module10=CustomButton
@@ -36,7 +37,7 @@ Module7=ControlsPanel
 Module8=cRenderer
 Module9=cScene
 NumberOfFiles=4
-NumberOfLibraries=8
+NumberOfLibraries=9
 NumberOfModules=18
 Version=13.4
 @EndOfDesignText@
@@ -70,9 +71,6 @@ Sub Globals
 	
 	Dim Controls As ControlsPanel
 	
-	
-
-	
 	Public remFrames As Int = 1
 	
 End Sub
@@ -91,6 +89,8 @@ Sub Activity_Create(FirstTime As Boolean)
 
 	Scene.Initialize
 	Scene.BuildPreset_CornellBox
+	'
+	' example: persist the generated scene preset and load it back from storage
 '		============== Materials
 
 	Controls.refreshObjectPopover
@@ -110,7 +110,7 @@ Sub Activity_Create(FirstTime As Boolean)
 	Timer.Enabled = True
 	
 	scrW = pnl.Width : scrH = pnl.Height
-	
+
 '	Timer.Enabled = False
 '	pnl.Visible = False
 '	Controls.panelmain.Visible = False
@@ -189,4 +189,33 @@ Public Sub pathtrace
 	cvs.DrawBitmap(bmp, Null, dst)
 	pnl.Invalidate
 	Log("END == PathTrace")
+End Sub
+
+
+Public Sub CreateScenePreset
+	Scene.CreateEmptyPreset
+	Controls.refreshObjectPopover
+	resetTimer
+End Sub
+
+Public Sub SaveScenePreset(presetName As String) As String
+	Dim clean As String = presetName.Trim
+	If clean.Length = 0 Then clean = "scene"
+	Dim fileName As String = clean & ".json"
+	Dim json As String = Scene.SavePresetToFile(File.DirInternal, fileName)
+	Log($"Scene preset saved to ${fileName}"$)
+	Return json
+End Sub
+
+Public Sub LoadScenePreset(presetName As String)
+	Dim clean As String = presetName.Trim
+	If clean.Length = 0 Then Return
+	Dim fileName As String = clean & ".json"
+	If File.Exists(File.DirInternal, fileName) = False Then
+		Log($"Preset file not found: ${fileName}"$)
+		Return
+	End If
+	Scene.LoadPresetFromFile(File.DirInternal, fileName)
+	Controls.refreshObjectPopover
+	resetTimer
 End Sub

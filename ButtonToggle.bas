@@ -30,8 +30,8 @@ Sub Class_Globals
 	Dim outlineThickness As Int = 1.5dip
 	
 	Dim ToggleMode As Int = 1
-	Dim MODE_MultipleSelect = 1
-	Dim MODE_SingleSelect = 2
+	Dim MODE_MultipleSelect = 1 As Int
+	Dim MODE_SingleSelect = 2 as int
 	
 		
 	Private BT_OUTLINE_COLOR As Int = 0xFFE8DEF8

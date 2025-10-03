@@ -29,6 +29,7 @@ Sub Class_Globals
 	Dim popoverObjectsList As PopoverPanelView
 	Dim popoverObjectSettings As PopoverPanelView
 	
+	'model data
 	Dim edtPosition As EditVec3Field
 	Dim edtRotation As EditVec3Field
 	Dim edtScale As EditVec3Field
@@ -36,6 +37,10 @@ Sub Class_Globals
 	Dim sldReflect As SliderView
 	Dim btnVisible As ToggleButton
 	
+	'camera data
+	Dim sldCameraTurnSpeed As SliderView
+	Dim sldCameraMoveSpeed As SliderView
+	Dim sldCameraFOV As SliderView
 End Sub
 
 'Initializes the object. You can add parameters to this method if needed.
@@ -56,12 +61,9 @@ Public Sub build
 	popoverCamSettings = CreatePopover("asd")
 	popoverCamSettings.Title = "Camera Settings"
 
-	Dim sldCameraTurnSpeed As SliderView = AddSliderToPopover(popoverCamSettings, "sldCamMoveSpeed")
-'	sldCameraMoveSpeed.SetValue(Main.Scene.Camera.TurnSpeed, False)
-	Dim sldCameraMoveSpeed As SliderView = AddSliderToPopover(popoverCamSettings, "sldCamMoveSpeed")
-'	sldCameraMoveSpeed.SetValue(Main.Scene.Camera.MoveSpeed, True)
-	Dim sldCameraFOV As SliderView = AddSliderToPopover(popoverCamSettings, "sldCamFov")
-'	sldCameraFOV.SetValue(Main.Scene.Camera.FOV_Deg.As(Float), True)
+	sldCameraTurnSpeed = AddSliderToPopover(popoverCamSettings, "sldCamMoveSpeed")
+	sldCameraMoveSpeed = AddSliderToPopover(popoverCamSettings, "sldCamMoveSpeed")
+	sldCameraFOV = AddSliderToPopover(popoverCamSettings, "sldCamFov")
 
 	popoverObjectsList = CreatePopover("objectsList")
 	popoverObjectSettings = CreatePopover("ObjectSettings")
@@ -309,6 +311,10 @@ public Sub objectsList_SettingsClick
 				ApplyObjectDataToPopover(mdl)
 				popoverObjectSettings.ShowPanel
 			Case "camera"
+				
+				sldCameraTurnSpeed.SetValue(Main.Scene.Camera.TurnSpeed, False)
+				sldCameraMoveSpeed.SetValue(Main.Scene.Camera.MoveSpeed, False)
+				sldCameraFOV.SetValue(Main.Scene.Camera.FOV_Deg.As(Float), False)
 				popoverCamSettings.ShowPanel
 		End Select
 		Return
