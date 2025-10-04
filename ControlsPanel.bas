@@ -28,6 +28,7 @@ Sub Class_Globals
 	Dim popoverRenderSettings As PopoverPanelView
 	Dim popoverObjectsList As PopoverPanelView
 	Dim popoverObjectSettings As PopoverPanelView
+	Dim popoverPresets As PopoverPanelView
 	
 	'model data
 	Dim edtPosition As EditVec3Field
@@ -41,6 +42,10 @@ Sub Class_Globals
 	Dim sldCameraTurnSpeed As SliderView
 	Dim sldCameraMoveSpeed As SliderView
 	Dim sldCameraFOV As SliderView
+	
+	Dim txtPresetName As EditText
+	Dim presetsListPanel As Panel
+	Dim btnSavePreset As Button
 End Sub
 
 'Initializes the object. You can add parameters to this method if needed.
@@ -68,6 +73,10 @@ Public Sub build
 	popoverObjectsList = CreatePopover("objectsList")
 	popoverObjectSettings = CreatePopover("ObjectSettings")
 	build_PopoverObjectSettings
+	
+	popoverPresets = CreatePopover("presets")
+	build_PopoverPresets
+	popoverPresets.panelmain.BringToFront
 	
 '	render settings
 	popoverRenderSettings = CreatePopover("asd")
@@ -133,6 +142,14 @@ Public Sub build
 	btnpathTrace.TextSize = 30
 	btnpathTrace.Typeface = Typeface.DEFAULT_BOLD
 	
+	Dim btnPresets As Button
+	btnPresets.Initialize("btnPresets")
+	panelmain.AddView(btnPresets, UI.Right(btnpathTrace) + 4dip, 4dip, 18%x, 10%x)
+	btnPresets.Background = UI.GetDrawable(Colors.White, btnPresets.Height)
+	btnPresets.Text = "Scenes"
+	btnPresets.Padding = Array As Int(0, 0, 0, 0)
+	btnPresets.TextSize = 20
+	btnPresets.Typeface = Typeface.DEFAULT_BOLD
 
 
 	
@@ -212,6 +229,39 @@ Sub renderPathTrace_Click
 	CallSub(Main, "pathtrace")
 End Sub
 
+
+Sub btnPresets_Click
+	refreshPresetsPopover
+	popoverPresets.ShowPanel
+End Sub
+
+Sub presetSave_Click
+	Dim name As String = txtPresetName.Text.Trim
+	CallSub2(Main, "SaveScenePreset", name)
+	txtPresetName.Text = Main.CurrentScenePresetName
+	refreshPresetsPopover
+	ToastMessageShow($"Preset saved as ${Main.CurrentScenePresetName}"$, False)
+End Sub
+
+Sub presetLoad_Click
+	Dim btn As Button = Sender
+	Dim presetName As String = btn.Tag
+	If presetName = Null Then Return
+	CallSub2(Main, "LoadScenePreset", presetName)
+	txtPresetName.Text = Main.CurrentScenePresetName
+	refreshPresetsPopover
+	popoverPresets.HidePanel
+End Sub
+
+Sub presetDelete_Click
+	Dim btn As Button = Sender
+	Dim presetName As String = btn.Tag
+	If presetName = Null Then Return
+	CallSub2(Main, "DeleteScenePreset", presetName)
+	If Main.ScenePresetLoaded = False Then txtPresetName.Text = ""
+	refreshPresetsPopover
+	ToastMessageShow($"Deleted preset ${presetName}"$, False)
+End Sub
 
 public Sub CreatePopover(event As String) As PopoverPanelView
 	Dim newPopover As PopoverPanelView
@@ -405,4 +455,127 @@ public Sub btnVis_CheckedChange(Checked As Boolean)
 	If Not(Sender.As(ToggleButton).Enabled) Then Return
 	Sender.As(ToggleButton).Tag.As(cModel).Visible = Checked
 	CallSub(Main, "resetTimer")
+End Sub
+
+Sub build_PopoverPresets
+	popoverPresets.Title = "Scene Presets"
+
+	Dim content As Panel = popoverPresets.containerPanel.Panel
+	Dim padding As Int = 12dip
+
+	txtPresetName.Initialize("txtPresetName")
+	txtPresetName.InputType = txtPresetName.INPUT_TYPE_TEXT
+	txtPresetName.SingleLine = True
+	txtPresetName.TextSize = 16
+	txtPresetName.TextColor = Colors.Black
+	txtPresetName.Color = Colors.White
+	txtPresetName.Hint = "Preset name"
+	content.AddView(txtPresetName, padding, padding, popoverPresets.containerPanel.Width - padding * 2, 40dip)
+
+	btnSavePreset.Initialize("presetSave")
+	content.AddView(btnSavePreset, padding, UI.Bottom(txtPresetName) + SmallSpaceing, popoverPresets.containerPanel.Width - padding * 2, 44dip)
+	btnSavePreset.Text = "💾 Save Current Scene"
+	btnSavePreset.Typeface = Typeface.DEFAULT_BOLD
+	btnSavePreset.TextSize = 16
+	btnSavePreset.TextColor = Colors.White
+	btnSavePreset.Gravity = Gravity.CENTER
+	btnSavePreset.Background = UI.GetDrawable(Colors.RGB(0, 122, 255), btnSavePreset.Height)
+
+	presetsListPanel.Initialize("")
+	content.AddView(presetsListPanel, 0, UI.Bottom(btnSavePreset) + BigSpaceing, popoverPresets.containerPanel.Width, 0)
+	refreshPresetsPopover
+End Sub
+
+Public Sub refreshPresetsPopover
+	If popoverPresets.IsInitialized = False Then 
+		Log("popover no init")
+		Return
+	End If
+	Dim container As Panel = presetsListPanel
+	container.RemoveAllViews
+	Dim top As Int = 0
+	Dim rowHeight As Int = 52dip
+	Dim buttonWidth As Int = 74dip
+	Dim buttonHeight As Int = 36dip
+	Dim spacing As Int = 8dip
+	Dim paddingRight As Int = 12dip
+
+	Dim presets As List = CallSub(Main, "ListScenePresets")
+	If Not(presets.IsInitialized) Then
+		Return
+	End If
+	Dim highlightName As String = Main.CurrentScenePresetName
+	If highlightName = Null Then highlightName = ""
+	Dim highlight As Boolean = Main.ScenePresetLoaded And highlightName.Length > 0
+
+	For Each presetName As String In presets
+		
+		Dim row As Panel
+		row.Initialize("")
+		container.AddView(row, 0, top, popoverPresets.containerPanel.Width, rowHeight)
+		If highlight And presetName.ToLowerCase = highlightName.ToLowerCase Then
+			row.Color = Colors.RGB(220, 235, 255)
+		Else
+			row.Color = Colors.White
+		End If
+
+		Dim deleteLeft As Int = row.Width - paddingRight - buttonWidth
+		Dim loadLeft As Int = deleteLeft - spacing - buttonWidth
+
+		Dim lbl As Label
+		lbl.Initialize("")
+		lbl.Text = presetName
+		lbl.TextColor = Colors.Black
+		lbl.TextSize = 16
+		lbl.Typeface = Typeface.DEFAULT_BOLD
+		lbl.Gravity = Gravity.CENTER_VERTICAL
+		Dim labelWidth As Int = loadLeft - 16dip
+		If labelWidth < 0 Then labelWidth = row.Width - 32dip
+		row.AddView(lbl, 16dip, 0, labelWidth, rowHeight)
+
+		Dim btnLoad As Button
+		btnLoad.Initialize("presetLoad")
+		btnLoad.Tag = presetName
+		row.AddView(btnLoad, loadLeft, (rowHeight - buttonHeight) / 2, buttonWidth, buttonHeight)
+		btnLoad.Text = "Load"
+		btnLoad.TextSize = 14
+		btnLoad.Typeface = Typeface.DEFAULT_BOLD
+		btnLoad.TextColor = Colors.White
+		btnLoad.Background = UI.GetDrawable(Colors.RGB(76, 175, 80), buttonHeight)
+
+		Dim btnDelete As Button
+		btnDelete.Initialize("presetDelete")
+		btnDelete.Tag = presetName
+		row.AddView(btnDelete, deleteLeft, (rowHeight - buttonHeight) / 2, buttonWidth, buttonHeight)
+		btnDelete.Text = "Delete"
+		btnDelete.TextSize = 14
+		btnDelete.Typeface = Typeface.DEFAULT_BOLD
+		btnDelete.TextColor = Colors.White
+		btnDelete.Background = UI.GetDrawable(Colors.RGB(244, 67, 54), buttonHeight)
+
+		top = top + rowHeight + 2dip
+	Next
+
+	If presets.Size > 0 Then top = top - 2dip
+
+	If presets.Size = 0 Then
+		Dim emptyLabel As Label
+		emptyLabel.Initialize("")
+		emptyLabel.Text = "No presets saved yet."
+		emptyLabel.TextColor = Colors.Gray
+		emptyLabel.Gravity = Gravity.CENTER
+		emptyLabel.TextSize = 14
+		container.AddView(emptyLabel, 0, top, popoverPresets.containerPanel.Width, 40dip)
+		top = top + 40dip
+	End If
+
+	If Main.ScenePresetLoaded And highlightName.Length > 0 Then
+		txtPresetName.Text = Main.CurrentScenePresetName
+	Else
+		txtPresetName.Text = ""
+	End If
+
+	If top < 0 Then top = 0
+	container.Height = top
+	popoverPresets.containerPanel.Panel.Height = presetsListPanel.Top + container.Height + 12dip
 End Sub

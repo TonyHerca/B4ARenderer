@@ -62,6 +62,9 @@ Sub Process_Globals
 	Dim Renderer As cRenderer
 	Dim Scene As cScene
 	Dim Opt As RenderOptions
+	
+	Public ScenePresetLoaded As Boolean = False
+	Public CurrentScenePresetName As String = ""
 End Sub
 
 Sub Globals
@@ -94,6 +97,9 @@ Sub Activity_Create(FirstTime As Boolean)
 '		============== Materials
 
 	Controls.refreshObjectPopover
+	If Controls.IsInitialized Then Controls.refreshPresetsPopover
+	ScenePresetLoaded = False
+	CurrentScenePresetName = ""
 	
 	Renderer.Initialize
 	Opt.BackfaceCull = True : Opt.DrawFaces = True : Opt.DrawEdges = False : Opt.DrawVerts = False : Opt.SmoothShading = False	
@@ -195,15 +201,27 @@ End Sub
 Public Sub CreateScenePreset
 	Scene.CreateEmptyPreset
 	Controls.refreshObjectPopover
+	ScenePresetLoaded = False
+	CurrentScenePresetName = ""
+	If Controls.IsInitialized Then Controls.refreshPresetsPopover
 	resetTimer
 End Sub
 
 Public Sub SaveScenePreset(presetName As String) As String
 	Dim clean As String = presetName.Trim
-	If clean.Length = 0 Then clean = "scene"
+	If clean.Length = 0 Then
+		If ScenePresetLoaded And CurrentScenePresetName.Length > 0 Then
+			clean = CurrentScenePresetName
+		Else
+			clean = GenerateUniquePresetName("scene")
+		End If
+	End If
 	Dim fileName As String = clean & ".json"
 	Dim json As String = Scene.SavePresetToFile(File.DirInternal, fileName)
 	Log($"Scene preset saved to ${fileName}"$)
+	ScenePresetLoaded = True
+	CurrentScenePresetName = clean
+	If Controls.IsInitialized Then Controls.refreshPresetsPopover
 	Return json
 End Sub
 
@@ -217,5 +235,60 @@ Public Sub LoadScenePreset(presetName As String)
 	End If
 	Scene.LoadPresetFromFile(File.DirInternal, fileName)
 	Controls.refreshObjectPopover
+	ScenePresetLoaded = True
+	CurrentScenePresetName = clean
+	If Controls.IsInitialized Then Controls.refreshPresetsPopover
 	resetTimer
+End Sub
+
+
+Public Sub DeleteScenePreset(presetName As String)
+	Dim clean As String = presetName.Trim
+	If clean.Length = 0 Then Return
+	Dim fileName As String = clean & ".json"
+	If File.Exists(File.DirInternal, fileName) = False Then Return
+	File.Delete(File.DirInternal, fileName)
+	If ScenePresetLoaded And clean.ToLowerCase = CurrentScenePresetName.ToLowerCase Then
+		ScenePresetLoaded = False
+		CurrentScenePresetName = ""
+	End If
+	If Controls.IsInitialized Then Controls.refreshPresetsPopover
+End Sub
+
+Public Sub ListScenePresets As List
+	Dim result As List
+	result.Initialize
+	Dim files As List = File.ListFiles(File.DirInternal)
+	If files.IsInitialized = False Then Return result
+	For Each fileName As String In files
+		If fileName.ToLowerCase.EndsWith(".json") Then
+			result.Add(fileName.SubString2(0, fileName.Length - 5))
+		End If
+	Next
+	Return result
+End Sub
+
+Private Sub GenerateUniquePresetName(base As String) As String
+	Dim cleanBase As String = base.Trim
+	If cleanBase.Length = 0 Then 
+		cleanBase = "scene"
+	End If
+	Dim existing As List = ListScenePresets
+	Dim existingLower As List
+	existingLower.Initialize
+	For Each name As String In existing
+		existingLower.Add(name.ToLowerCase)
+	Next
+	If existingLower.IndexOf(cleanBase.ToLowerCase) = -1 Then 
+		Return cleanBase
+	End If
+	Dim suffix As Int = 1
+	Do While suffix > 0
+		Dim candidate As String = $"${cleanBase}-${suffix}"$
+		If existingLower.IndexOf(candidate.ToLowerCase) = -1 Then 
+			Return candidate
+		End If
+		suffix = suffix + 1
+	Loop
+	Return ""
 End Sub
