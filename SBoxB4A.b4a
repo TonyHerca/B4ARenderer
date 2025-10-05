@@ -240,7 +240,8 @@ Public Sub pathtrace
 	Dim samples As Int = Max(1, PathTraceSamples)
 	Dim bounces As Int = Max(1, PathTraceBounces)
 	Renderer.PathBackgroundColor = PathTraceVoidColor
-	Dim bmp As Bitmap = Renderer.RenderPathTrace(Scene, pnl.Width, pnl.Height, samples, bounces)
+	Dim task As ResumableSub = Renderer.RenderPathTrace(Scene, pnl.Width, pnl.Height, samples, bounces)
+	Wait For (task) Complete (bmp As Bitmap)
 	cvs.DrawColor(Colors.Black)
 	Dim dst As Rect : dst.Initialize(0, 0, pnl.Width, pnl.Height)
 	cvs.DrawBitmap(bmp, Null, dst)
