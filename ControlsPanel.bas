@@ -185,7 +185,14 @@ Public Sub build
 	btnPresets.TextSize = 20
 	btnPresets.Typeface = Typeface.DEFAULT_BOLD
 
-
+	Dim btnObjects As Button
+	btnObjects.Initialize("btnObjects")
+	panelmain.AddView(btnObjects, UI.Right(btnPresets) + 4dip, 4dip, 18%x, 10%x)
+	btnObjects.Background = UI.GetDrawable(Colors.White, btnObjects.Height)
+	btnObjects.Text = "Objects"
+	btnObjects.Padding = Array As Int(0, 0, 0, 0)
+	btnObjects.TextSize = 20
+	btnObjects.Typeface = Typeface.DEFAULT_BOLD
 	
 '	dim focusCameraAtSomething ??
 '	dim cameraRenderMode - ??? ?? ?? ?? 
@@ -565,6 +572,11 @@ End Sub
 Sub btnPresets_Click
 	refreshPresetsPopover
 	popoverPresets.ShowPanel
+End Sub
+
+Sub btnObjects_Click
+	refreshObjectPopover
+	popoverObjectsList.ShowPanel
 End Sub
 
 Sub presetSave_Click
