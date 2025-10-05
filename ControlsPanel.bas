@@ -47,8 +47,11 @@ Sub Class_Globals
 	Dim presetsListPanel As Panel
 	Dim btnSavePreset As Button
 	
+	
+	'todo most of these here can be removed from globals
 	Dim btnRenderSettings As Button
 	Dim spnRenderMode As Spinner
+	Dim pnlRenderWire As Panel
 	Dim pnlRenderSolid As Panel
 	Dim pnlRenderRay As Panel
 	Dim pnlRenderPath As Panel
@@ -60,11 +63,32 @@ Sub Class_Globals
 	Dim txtSolidFaceColor As EditText
 	Dim txtSolidEdgeColor As EditText
 	Dim txtSolidVertexColor As EditText
+	Dim txtSolidVoidColor As EditText
 	Dim pnlSolidFaceColorPreview As Panel
 	Dim pnlSolidEdgeColorPreview As Panel
 	Dim pnlSolidVertexColorPreview As Panel
+	Dim pnlSolidVoidColorPreview As Panel
 	Dim sldSolidEdgeThickness As SliderView
 	Dim sldSolidVertexSize As SliderView
+	Dim chkWireBackfaceCull As CheckBox
+	Dim chkWireDrawFaces As CheckBox
+	Dim chkWireDrawEdges As CheckBox
+	Dim chkWireDrawVerts As CheckBox
+	Dim chkWireUseMaterialColors As CheckBox
+	Dim chkWireShowCamera As CheckBox
+	Dim chkWireShowLights As CheckBox
+	Dim chkWireShowModels As CheckBox
+	Dim chkWireShowAxes As CheckBox
+	Dim txtWireFaceColor As EditText
+	Dim txtWireEdgeColor As EditText
+	Dim txtWireVertexColor As EditText
+	Dim txtWireVoidColor As EditText
+	Dim pnlWireFaceColorPreview As Panel
+	Dim pnlWireEdgeColorPreview As Panel
+	Dim pnlWireVertexColorPreview As Panel
+	Dim pnlWireVoidColorPreview As Panel
+	Dim sldWireEdgeThickness As SliderView
+	Dim sldWireVertexSize As SliderView
 	Dim spnRayResolution As Spinner
 	Dim chkRayUseBVH As CheckBox
 	Dim txtRayBounces As EditText
@@ -204,18 +228,20 @@ Sub sldCamFov_ValueChanged(m As Map)
 End Sub
 
 Sub RenderWire_Click
-	If Not(popoverObjectsList.panelmain.Visible) Then
-		popoverObjectsList.ShowPanel
-	End If
+	Main.Renderer.setRenderMode(Main.Renderer.MODE_WIREFRAME)
+	UpdateRenderSettingsUI
+	CallSub(Main, "resetTimer")
 End Sub
 
 Sub RenderSolid_Click
 	Main.Renderer.setRenderMode(0)
+	UpdateRenderSettingsUI
 	CallSub(Main, "resetTimer")
 End Sub
 
 Sub RenderShaded_Click
 	Main.Renderer.setRenderMode(1)
+	UpdateRenderSettingsUI
 	CallSub(Main, "resetTimer")
 End Sub
 
@@ -235,6 +261,8 @@ Sub spnRenderMode_ItemClick (Position As Int, Value As Object)
 			mode = Main.Renderer.MODE_RAYTRACE
 		Case 2
 			mode = Main.Renderer.MODE_PATHTRACE
+		Case 3
+			mode = Main.Renderer.MODE_WIREFRAME	
 		Case Else
 			mode = Main.Renderer.MODE_RASTER
 	End Select
@@ -322,6 +350,129 @@ Sub sldSolidVertexSize_ValueChanged(m As Map)
 	CallSub(Main, "resetTimer")
 End Sub
 
+Sub txtSolidVoidColor_TextChanged (Old As String, New As String)
+	If renderSettingsUpdating Then Return
+	Dim parsed As Object = ParseColorOrNull(New)
+	If parsed Is Int Then
+		Dim color As Int = parsed
+		Main.Opt.VoidColor = color
+		If pnlSolidVoidColorPreview.IsInitialized Then pnlSolidVoidColorPreview.Color = color
+		CallSub(Main, "resetTimer")
+	End If
+End Sub
+
+Sub chkWireBackfaceCull_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.WireOpt.BackfaceCull = Checked
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub chkWireUseMaterialColors_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.WireOpt.UseMaterialColors = Checked
+	UpdateWireframeSettingsEnabled
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub chkWireDrawFaces_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.WireOpt.DrawFaces = Checked
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub chkWireDrawEdges_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.WireOpt.DrawEdges = Checked
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub chkWireDrawVerts_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.WireOpt.DrawVerts = Checked
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub chkWireShowModels_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.WireOpt.ShowModels = Checked
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub chkWireShowCamera_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.WireOpt.ShowCamera = Checked
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub chkWireShowLights_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.WireOpt.ShowLights = Checked
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub chkWireShowAxes_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.WireOpt.ShowOriginAxes = Checked
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub txtWireFaceColor_TextChanged (Old As String, New As String)
+	If renderSettingsUpdating Then Return
+	Dim parsed As Object = ParseColorOrNull(New)
+	If parsed Is Int Then
+		Dim color As Int = parsed
+		Main.WireOpt.FaceColor = color
+		If pnlWireFaceColorPreview.IsInitialized Then pnlWireFaceColorPreview.Color = color
+		If Main.WireOpt.UseMaterialColors = False Then CallSub(Main, "resetTimer")
+	End If
+End Sub
+
+Sub txtWireEdgeColor_TextChanged (Old As String, New As String)
+	If renderSettingsUpdating Then Return
+	Dim parsed As Object = ParseColorOrNull(New)
+	If parsed Is Int Then
+		Dim color As Int = parsed
+		Main.WireOpt.EdgeColor = color
+		If pnlWireEdgeColorPreview.IsInitialized Then pnlWireEdgeColorPreview.Color = color
+		CallSub(Main, "resetTimer")
+	End If
+End Sub
+
+Sub txtWireVertexColor_TextChanged (Old As String, New As String)
+	If renderSettingsUpdating Then Return
+	Dim parsed As Object = ParseColorOrNull(New)
+	If parsed Is Int Then
+		Dim color As Int = parsed
+		Main.WireOpt.VertexColor = color
+		If pnlWireVertexColorPreview.IsInitialized Then pnlWireVertexColorPreview.Color = color
+		CallSub(Main, "resetTimer")
+	End If
+End Sub
+
+Sub txtWireVoidColor_TextChanged (Old As String, New As String)
+	If renderSettingsUpdating Then Return
+	Dim parsed As Object = ParseColorOrNull(New)
+	If parsed Is Int Then
+		Dim color As Int = parsed
+		Main.WireOpt.VoidColor = color
+		If pnlWireVoidColorPreview.IsInitialized Then pnlWireVoidColorPreview.Color = color
+		CallSub(Main, "resetTimer")
+	End If
+End Sub
+
+Sub sldWireEdgeThickness_ValueChanged(m As Map)
+	If renderSettingsUpdating Then Return
+	Dim value As Float = m.Get("Value")
+	Main.WireOpt.EdgeThickness = value
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub sldWireVertexSize_ValueChanged(m As Map)
+	If renderSettingsUpdating Then Return
+	Dim value As Float = m.Get("Value")
+	Main.WireOpt.VertexSize = value
+	CallSub(Main, "resetTimer")
+End Sub
 Sub spnRayResolution_ItemClick (Position As Int, Value As Object)
 	If renderSettingsUpdating Then Return
 	If renderResolutionValues.IsInitialized = False Then Return
@@ -566,11 +717,16 @@ public Sub build_PopoverRenderSettings
 
 	spnRenderMode.Initialize("spnRenderMode")
 	content.AddView(spnRenderMode, padding, padding, popoverRenderSettings.containerPanel.Width - padding * 2, 40dip)
-	spnRenderMode.AddAll(Array As String("Solid (Raster)", "Ray Trace", "Path Trace"))
+	spnRenderMode.AddAll(Array As String("Solid (Raster)", "Ray Trace", "Path Trace",  "Wireframe"))
 
+	pnlRenderWire.Initialize("")
+	pnlRenderWire.Color = Colors.Transparent
+	content.AddView(pnlRenderWire, 0, spnRenderMode.Top + spnRenderMode.Height + padding, popoverRenderSettings.containerPanel.Width, 0)
+	BuildWireRenderSettings(pnlRenderWire, padding)
+	
 	pnlRenderSolid.Initialize("")
 	pnlRenderSolid.Color = Colors.Transparent
-	content.AddView(pnlRenderSolid, 0, spnRenderMode.Top + spnRenderMode.Height + padding, popoverRenderSettings.containerPanel.Width, 0)
+	content.AddView(pnlRenderSolid, 0, pnlRenderWire.Top, popoverRenderSettings.containerPanel.Width, 0)
 	BuildSolidRenderSettings(pnlRenderSolid, padding)
 
 	pnlRenderRay.Initialize("")
@@ -673,6 +829,23 @@ Private Sub BuildSolidRenderSettings(parent As Panel, padding As Int)
 	parent.AddView(pnlSolidVertexColorPreview, parent.Width - padding - 40dip, top, 40dip, 36dip)
 	top = top + 36dip + SmallSpaceing
 
+	Dim lblSolidVoid As Label
+	lblSolidVoid.Initialize("")
+	lblSolidVoid.Text = "Void Color (#RRGGBB)"
+	lblSolidVoid.TextSize = 14
+	lblSolidVoid.TextColor = Colors.Black
+	parent.AddView(lblSolidVoid, padding, top, parent.Width - padding * 2, 20dip)
+	top = top + 20dip + SmallSpaceing
+
+	txtSolidVoidColor.Initialize("txtSolidVoidColor")
+	StyleTextField(txtSolidVoidColor)
+	parent.AddView(txtSolidVoidColor, padding, top, parent.Width - padding * 3 - 40dip, 36dip)
+	pnlSolidVoidColorPreview.Initialize("")
+	pnlSolidVoidColorPreview.Background = UI.GetDrawableWithBorder(Colors.White, 6dip, 1dip, Colors.LightGray)
+	pnlSolidVoidColorPreview.Color = Colors.Black
+	parent.AddView(pnlSolidVoidColorPreview, parent.Width - padding - 40dip, top, 40dip, 36dip)
+	top = top + 36dip + SmallSpaceing
+
 	sldSolidEdgeThickness.Initialize(Me, "sldSolidEdgeThickness")
 	sldSolidEdgeThickness.AddToParent(parent, padding, top, parent.Width - padding * 2, 80dip)
 	sldSolidEdgeThickness.setTitle("Edge Thickness (dip)")
@@ -682,6 +855,146 @@ Private Sub BuildSolidRenderSettings(parent As Panel, padding As Int)
 	sldSolidVertexSize.AddToParent(parent, padding, top, parent.Width - padding * 2, 80dip)
 	sldSolidVertexSize.setTitle("Vertex Size (dip)")
 	top = UI.Bottom(sldSolidVertexSize.panelmain) + padding
+
+	parent.Height = top
+End Sub
+
+
+Private Sub BuildWireRenderSettings(parent As Panel, padding As Int)
+	parent.RemoveAllViews
+	Dim top As Int = 0
+
+	chkWireBackfaceCull.Initialize("chkWireBackfaceCull")
+	chkWireBackfaceCull.Text = "Backface Cull"
+	chkWireBackfaceCull.TextSize = 16
+	parent.AddView(chkWireBackfaceCull, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	chkWireUseMaterialColors.Initialize("chkWireUseMaterialColors")
+	chkWireUseMaterialColors.Text = "Use Material Colors"
+	chkWireUseMaterialColors.TextSize = 16
+	parent.AddView(chkWireUseMaterialColors, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	chkWireDrawFaces.Initialize("chkWireDrawFaces")
+	chkWireDrawFaces.Text = "Draw Faces"
+	chkWireDrawFaces.TextSize = 16
+	parent.AddView(chkWireDrawFaces, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	chkWireDrawEdges.Initialize("chkWireDrawEdges")
+	chkWireDrawEdges.Text = "Draw Edges"
+	chkWireDrawEdges.TextSize = 16
+	parent.AddView(chkWireDrawEdges, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	chkWireDrawVerts.Initialize("chkWireDrawVerts")
+	chkWireDrawVerts.Text = "Draw Vertices"
+	chkWireDrawVerts.TextSize = 16
+	parent.AddView(chkWireDrawVerts, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	chkWireShowModels.Initialize("chkWireShowModels")
+	chkWireShowModels.Text = "Show Models"
+	chkWireShowModels.TextSize = 16
+	parent.AddView(chkWireShowModels, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	chkWireShowCamera.Initialize("chkWireShowCamera")
+	chkWireShowCamera.Text = "Show Camera Overlay"
+	chkWireShowCamera.TextSize = 16
+	parent.AddView(chkWireShowCamera, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	chkWireShowLights.Initialize("chkWireShowLights")
+	chkWireShowLights.Text = "Show Lights"
+	chkWireShowLights.TextSize = 16
+	parent.AddView(chkWireShowLights, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	chkWireShowAxes.Initialize("chkWireShowAxes")
+	chkWireShowAxes.Text = "Show Origin Axes"
+	chkWireShowAxes.TextSize = 16
+	parent.AddView(chkWireShowAxes, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + BigSpaceing
+
+	Dim lblWireFace As Label
+	lblWireFace.Initialize("")
+	lblWireFace.Text = "Face Color (#RRGGBB)"
+	lblWireFace.TextSize = 14
+	lblWireFace.TextColor = Colors.Black
+	parent.AddView(lblWireFace, padding, top, parent.Width - padding * 2, 20dip)
+	top = top + 20dip + SmallSpaceing
+
+	txtWireFaceColor.Initialize("txtWireFaceColor")
+	StyleTextField(txtWireFaceColor)
+	parent.AddView(txtWireFaceColor, padding, top, parent.Width - padding * 3 - 40dip, 36dip)
+	pnlWireFaceColorPreview.Initialize("")
+	pnlWireFaceColorPreview.Background = UI.GetDrawableWithBorder(Colors.White, 6dip, 1dip, Colors.LightGray)
+	pnlWireFaceColorPreview.Color = Colors.Black
+	parent.AddView(pnlWireFaceColorPreview, parent.Width - padding - 40dip, top, 40dip, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	Dim lblWireEdge As Label
+	lblWireEdge.Initialize("")
+	lblWireEdge.Text = "Edge Color (#RRGGBB)"
+	lblWireEdge.TextSize = 14
+	lblWireEdge.TextColor = Colors.Black
+	parent.AddView(lblWireEdge, padding, top, parent.Width - padding * 2, 20dip)
+	top = top + 20dip + SmallSpaceing
+
+	txtWireEdgeColor.Initialize("txtWireEdgeColor")
+	StyleTextField(txtWireEdgeColor)
+	parent.AddView(txtWireEdgeColor, padding, top, parent.Width - padding * 3 - 40dip, 36dip)
+	pnlWireEdgeColorPreview.Initialize("")
+	pnlWireEdgeColorPreview.Background = UI.GetDrawableWithBorder(Colors.White, 6dip, 1dip, Colors.LightGray)
+	pnlWireEdgeColorPreview.Color = Colors.Black
+	parent.AddView(pnlWireEdgeColorPreview, parent.Width - padding - 40dip, top, 40dip, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	Dim lblWireVert As Label
+	lblWireVert.Initialize("")
+	lblWireVert.Text = "Vertex Color (#RRGGBB)"
+	lblWireVert.TextSize = 14
+	lblWireVert.TextColor = Colors.Black
+	parent.AddView(lblWireVert, padding, top, parent.Width - padding * 2, 20dip)
+	top = top + 20dip + SmallSpaceing
+
+	txtWireVertexColor.Initialize("txtWireVertexColor")
+	StyleTextField(txtWireVertexColor)
+	parent.AddView(txtWireVertexColor, padding, top, parent.Width - padding * 3 - 40dip, 36dip)
+	pnlWireVertexColorPreview.Initialize("")
+	pnlWireVertexColorPreview.Background = UI.GetDrawableWithBorder(Colors.White, 6dip, 1dip, Colors.LightGray)
+	pnlWireVertexColorPreview.Color = Colors.Black
+	parent.AddView(pnlWireVertexColorPreview, parent.Width - padding - 40dip, top, 40dip, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	Dim lblWireVoid As Label
+	lblWireVoid.Initialize("")
+	lblWireVoid.Text = "Void Color (#RRGGBB)"
+	lblWireVoid.TextSize = 14
+	lblWireVoid.TextColor = Colors.Black
+	parent.AddView(lblWireVoid, padding, top, parent.Width - padding * 2, 20dip)
+	top = top + 20dip + SmallSpaceing
+
+	txtWireVoidColor.Initialize("txtWireVoidColor")
+	StyleTextField(txtWireVoidColor)
+	parent.AddView(txtWireVoidColor, padding, top, parent.Width - padding * 3 - 40dip, 36dip)
+	pnlWireVoidColorPreview.Initialize("")
+	pnlWireVoidColorPreview.Background = UI.GetDrawableWithBorder(Colors.White, 6dip, 1dip, Colors.LightGray)
+	pnlWireVoidColorPreview.Color = Colors.Black
+	parent.AddView(pnlWireVoidColorPreview, parent.Width - padding - 40dip, top, 40dip, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	sldWireEdgeThickness.Initialize(Me, "sldWireEdgeThickness")
+	sldWireEdgeThickness.AddToParent(parent, padding, top, parent.Width - padding * 2, 80dip)
+	sldWireEdgeThickness.setTitle("Edge Thickness (dip)")
+	top = UI.Bottom(sldWireEdgeThickness.panelmain) + SmallSpaceing
+
+	sldWireVertexSize.Initialize(Me, "sldWireVertexSize")
+	sldWireVertexSize.AddToParent(parent, padding, top, parent.Width - padding * 2, 80dip)
+	sldWireVertexSize.setTitle("Vertex Size (dip)")
+	top = UI.Bottom(sldWireVertexSize.panelmain) + padding
 
 	parent.Height = top
 End Sub
@@ -827,7 +1140,6 @@ Private Sub UpdateRenderSettingsUI
 		spnRenderMode.SelectedIndex = 0
 		mode = 0
 	End If
-
 	If chkSolidSmoothShading.IsInitialized Then chkSolidSmoothShading.Checked = Main.Opt.SmoothShading
 	If chkSolidUseMaterialColors.IsInitialized Then chkSolidUseMaterialColors.Checked = Main.Opt.UseMaterialColors
 	If chkSolidDrawFaces.IsInitialized Then chkSolidDrawFaces.Checked = Main.Opt.DrawFaces
@@ -839,6 +1151,8 @@ Private Sub UpdateRenderSettingsUI
 	If pnlSolidEdgeColorPreview.IsInitialized Then pnlSolidEdgeColorPreview.Color = Main.Opt.EdgeColor
 	If txtSolidVertexColor.IsInitialized Then txtSolidVertexColor.Text = FormatColor(Main.Opt.VertexColor)
 	If pnlSolidVertexColorPreview.IsInitialized Then pnlSolidVertexColorPreview.Color = Main.Opt.VertexColor
+	If txtSolidVoidColor.IsInitialized Then txtSolidVoidColor.Text = FormatColor(Main.Opt.VoidColor)
+	If pnlSolidVoidColorPreview.IsInitialized Then pnlSolidVoidColorPreview.Color = Main.Opt.VoidColor
 	If sldSolidEdgeThickness.IsInitialized Then
 		sldSolidEdgeThickness.SetRange(0.5, 10)
 		sldSolidEdgeThickness.SetValue(Main.Opt.EdgeThickness, False)
@@ -848,6 +1162,32 @@ Private Sub UpdateRenderSettingsUI
 		sldSolidVertexSize.SetValue(Main.Opt.VertexSize, False)
 	End If
 
+	If chkWireBackfaceCull.IsInitialized Then chkWireBackfaceCull.Checked = Main.WireOpt.BackfaceCull
+	If chkWireUseMaterialColors.IsInitialized Then chkWireUseMaterialColors.Checked = Main.WireOpt.UseMaterialColors
+	If chkWireDrawFaces.IsInitialized Then chkWireDrawFaces.Checked = Main.WireOpt.DrawFaces
+	If chkWireDrawEdges.IsInitialized Then chkWireDrawEdges.Checked = Main.WireOpt.DrawEdges
+	If chkWireDrawVerts.IsInitialized Then chkWireDrawVerts.Checked = Main.WireOpt.DrawVerts
+	If chkWireShowModels.IsInitialized Then chkWireShowModels.Checked = Main.WireOpt.ShowModels
+	If chkWireShowCamera.IsInitialized Then chkWireShowCamera.Checked = Main.WireOpt.ShowCamera
+	If chkWireShowLights.IsInitialized Then chkWireShowLights.Checked = Main.WireOpt.ShowLights
+	If chkWireShowAxes.IsInitialized Then chkWireShowAxes.Checked = Main.WireOpt.ShowOriginAxes
+	If txtWireFaceColor.IsInitialized Then txtWireFaceColor.Text = FormatColor(Main.WireOpt.FaceColor)
+	If pnlWireFaceColorPreview.IsInitialized Then pnlWireFaceColorPreview.Color = Main.WireOpt.FaceColor
+	If txtWireEdgeColor.IsInitialized Then txtWireEdgeColor.Text = FormatColor(Main.WireOpt.EdgeColor)
+	If pnlWireEdgeColorPreview.IsInitialized Then pnlWireEdgeColorPreview.Color = Main.WireOpt.EdgeColor
+	If txtWireVertexColor.IsInitialized Then txtWireVertexColor.Text = FormatColor(Main.WireOpt.VertexColor)
+	If pnlWireVertexColorPreview.IsInitialized Then pnlWireVertexColorPreview.Color = Main.WireOpt.VertexColor
+	If txtWireVoidColor.IsInitialized Then txtWireVoidColor.Text = FormatColor(Main.WireOpt.VoidColor)
+	If pnlWireVoidColorPreview.IsInitialized Then pnlWireVoidColorPreview.Color = Main.WireOpt.VoidColor
+	If sldWireEdgeThickness.IsInitialized Then
+		sldWireEdgeThickness.SetRange(0.5, 10)
+		sldWireEdgeThickness.SetValue(Main.WireOpt.EdgeThickness, False)
+	End If
+	If sldWireVertexSize.IsInitialized Then
+		sldWireVertexSize.SetRange(0.5, 12)
+		sldWireVertexSize.SetValue(Main.WireOpt.VertexSize, False)
+	End If
+	
 	If renderResolutionValues.IsInitialized = False Then renderResolutionValues.Initialize2(Array As Object(1.0, 0.75, 0.5, 0.25, 0.1))
 	If spnRayResolution.IsInitialized And spnRayResolution.Size > 0 Then
 		Dim scale As Double = Main.RaytraceResolutionScale
@@ -877,12 +1217,17 @@ Private Sub UpdateRenderSettingsUI
 	renderSettingsUpdating = False
 
 	UpdateSolidSettingsEnabled
+	UpdateWireframeSettingsEnabled
 	UpdateRenderModePanels(mode)
 End Sub
 
 Private Sub UpdateRenderModePanels(mode As Int)
 	If spnRenderMode.IsInitialized = False Then Return
 	Dim top As Int = spnRenderMode.Top + spnRenderMode.Height + 12dip
+	If pnlRenderWire.IsInitialized Then
+		pnlRenderWire.Top = top
+		pnlRenderWire.Visible = (mode = Main.Renderer.MODE_WIREFRAME)
+	End If
 	If pnlRenderSolid.IsInitialized Then
 		pnlRenderSolid.Top = top
 		pnlRenderSolid.Visible = (mode = Main.Renderer.MODE_RASTER)
@@ -897,7 +1242,9 @@ Private Sub UpdateRenderModePanels(mode As Int)
 	End If
 
 	Dim total As Int = top
-	If pnlRenderSolid.IsInitialized And pnlRenderSolid.Visible Then
+	If pnlRenderWire.IsInitialized And pnlRenderWire.Visible Then
+		total = top + pnlRenderWire.Height
+	Else If pnlRenderSolid.IsInitialized And pnlRenderSolid.Visible Then
 		total = top + pnlRenderSolid.Height
 	Else If pnlRenderRay.IsInitialized And pnlRenderRay.Visible Then
 		total = top + pnlRenderRay.Height
@@ -923,6 +1270,15 @@ Private Sub UpdateSolidSettingsEnabled
 	If pnlSolidEdgeColorPreview.IsInitialized Then pnlSolidEdgeColorPreview.Enabled = allowExtras
 	If txtSolidVertexColor.IsInitialized Then txtSolidVertexColor.Enabled = allowExtras
 	If pnlSolidVertexColorPreview.IsInitialized Then pnlSolidVertexColorPreview.Enabled = allowExtras
+	If txtSolidVoidColor.IsInitialized Then txtSolidVoidColor.Enabled = True
+	If pnlSolidVoidColorPreview.IsInitialized Then pnlSolidVoidColorPreview.Enabled = True
+End Sub
+
+Private Sub UpdateWireframeSettingsEnabled
+	If chkWireUseMaterialColors.IsInitialized = False Then Return
+	Dim allowFaceColor As Boolean = Not(chkWireUseMaterialColors.Checked)
+	If txtWireFaceColor.IsInitialized Then txtWireFaceColor.Enabled = allowFaceColor
+	If pnlWireFaceColorPreview.IsInitialized Then pnlWireFaceColorPreview.Enabled = allowFaceColor
 End Sub
 
 Private Sub FormatColor(col As Int) As String

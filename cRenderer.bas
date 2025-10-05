@@ -7,7 +7,9 @@ Version=13.4
 #IgnoreWarnings: 11, 9
 
 Sub Class_Globals
-	Type RenderOptions(BackfaceCull As Boolean, DrawFaces As Boolean, DrawEdges As Boolean, DrawVerts As Boolean, SmoothShading As Boolean, UseMaterialColors As Boolean, FaceColor As Int, EdgeColor As Int, VertexColor As Int, EdgeThickness As Float, VertexSize As Float)
+	Type RenderOptions(BackfaceCull As Boolean, DrawFaces As Boolean, DrawEdges As Boolean, DrawVerts As Boolean, SmoothShading As Boolean, UseMaterialColors As Boolean, FaceColor As Int, EdgeColor As Int, VertexColor As Int, EdgeThickness As Float, VertexSize As Float, VoidColor As Int)
+	Type WireframeOptions(BackfaceCull As Boolean, DrawFaces As Boolean, DrawEdges As Boolean, DrawVerts As Boolean, UseMaterialColors As Boolean, FaceColor As Int, EdgeColor As Int, VertexColor As Int, EdgeThickness As Float, VertexSize As Float, VoidColor As Int, ShowCamera As Boolean, ShowLights As Boolean, ShowModels As Boolean, ShowOriginAxes As Boolean)
+	Type ScreenPoint(Success As Boolean, X As Float, Y As Float, Depth As Double)
 	Type RenderStats(TotalFaces As Int, CulledFaces As Int, DrawnFaces As Int, BuildMs As Int, RenderMs As Int)
 	Type Ray(Origin As Vec3, Dir As Vec3)
 	Type Hit(T As Double, FaceIndex As Int, U As Double, V As Double)
@@ -16,6 +18,7 @@ Sub Class_Globals
 	Public Const MODE_RASTER As Int = 0
 	Public Const MODE_RAYTRACE As Int = 1
 	Public Const MODE_PATHTRACE As Int = 2
+	Public Const MODE_WIREFRAME As Int = 3
 	Public RENDER_MODE As Int = 0
 	
 	
@@ -91,7 +94,9 @@ Public Sub RenderRaster(cvs As Canvas, dstW As Int, dstH As Int, scene As cScene
 	Dim stats As RenderStats
 	stats.TotalFaces = nF
 
+	backgroundColor = opt.VoidColor
 	cvs.DrawColor(backgroundColor)
+	
 	Dim edgeDip As Float = Max(0.5, opt.EdgeThickness)
 	Dim edgeWidth As Float = DipToCurrent(edgeDip)
 	Dim vertDip As Float = Max(0.5, opt.VertexSize)
@@ -222,17 +227,21 @@ Public Sub RenderRaster(cvs As Canvas, dstW As Int, dstH As Int, scene As cScene
 			Dim k As Double = 0.2 + 0.8 * intensity
 			Dim fillCol As Int = Colors.RGB(Min(255, ar*255*k), Min(255, ag*255*k), Min(255, ab*255*k))
 
-			Dim p As Path
-			p.Initialize(ax, ay)
-			p.LineTo(bx, by)
-			p.LineTo(cx, cy)
-			If opt.DrawFaces Then cvs.DrawPath(p, fillCol, True, 0)
+			If opt.DrawFaces Then 
+				Dim p As Path
+				p.Initialize(ax, ay)
+				p.LineTo(bx, by)
+				p.LineTo(cx, cy)
+				cvs.DrawPath(p, fillCol, True, 0)
+			End If
+			
 			If opt.DrawEdges Then
 				Dim edgeColor As Int = Colors.ARGB(220, 40, 40, 40)
 				cvs.DrawLine(ax, ay, bx, by, edgeColor, edgeWidth)
 				cvs.DrawLine(bx, by, cx, cy, edgeColor, edgeWidth)
 				cvs.DrawLine(cx, cy, ax, ay, edgeColor, edgeWidth)
 			End If
+			
 			If opt.DrawVerts Then
 				Dim vc As Int = Colors.Yellow
 				cvs.DrawCircle(ax, ay, vertRadius, vc, True, 0)
@@ -243,7 +252,7 @@ Public Sub RenderRaster(cvs As Canvas, dstW As Int, dstH As Int, scene As cScene
 			drawn = drawn + 1
 		End If
 	Next
-	
+
 	If useSmooth And opt.DrawFaces Then
 		Dim bmp As Bitmap
 		bmp.InitializeMutable(dstW, dstH)
@@ -264,6 +273,194 @@ Public Sub RenderRaster(cvs As Canvas, dstW As Int, dstH As Int, scene As cScene
 	Return stats
 End Sub
 
+' --- WIREFRAME ---
+Public Sub RenderWireframe(cvs As Canvas, dstW As Int, dstH As Int, scene As cScene, opt As WireframeOptions) As RenderStats
+
+	Dim t0 As Long = DateTime.Now
+	Dim FR As SceneFrame = scene.BuildFrame
+	Dim t1 As Long = DateTime.Now
+
+	Dim nV As Int = FR.Verts.Size, nF As Int = FR.Faces.Size
+	Dim stats As RenderStats
+	stats.TotalFaces = nF
+
+	cvs.DrawColor(opt.VoidColor)
+
+	If nV = 0 Or nF = 0 Then
+		LastStats = stats
+		Return stats
+	End If
+
+	Dim edgeDip As Float = Max(0.5, opt.EdgeThickness)
+	Dim edgeWidth As Float = DipToCurrent(edgeDip)
+	Dim vertDip As Float = Max(0.5, opt.VertexSize)
+	Dim vertRadius As Float = DipToCurrent(vertDip)
+
+	Dim right As Vec3, upv As Vec3, fwd As Vec3
+	Dim resultArr() As Vec3 = scene.Camera.Basis(right, upv, fwd)
+	fwd = resultArr(0) : right = resultArr(1) : upv = resultArr(2)
+	
+	Dim aspect As Double = dstW / Max(1, dstH)
+	Dim fovRad As Double = scene.Camera.FOV_Deg * cPI / 180
+	Dim f As Double = 1 / Tan(fovRad/2)
+	
+	Dim proj(nV*3) As Double
+	For i = 0 To nV - 1
+		Dim w As Vec3 = FR.Verts.Get(i)
+		Dim screen As ScreenPoint = ProjectWorldPoint(w, scene.Camera.Pos, right, upv, fwd, aspect, f, dstW, dstH)
+		proj(i*3+0) = screen.X
+		proj(i*3+1) = screen.Y
+		proj(i*3+2) = screen.Depth
+	Next
+
+	If opt.ShowModels Then
+		Dim sorter As List : sorter.Initialize
+		For fi = 0 To nF - 1
+			Dim fc As Face = FR.Faces.Get(fi)
+			Dim fd As FaceDepth
+			fd.Initialize
+			fd.Z = (proj(fc.A*3+2) + proj(fc.B*3+2) + proj(fc.C*3+2)) / 3
+			fd.I = fi
+			sorter.Add(fd)
+		Next
+		sorter.SortType("Z", False)
+		
+		Dim culled As Int, drawn As Int
+		For si = 0 To sorter.Size - 1
+			Dim fd As FaceDepth = sorter.Get(si)
+			Dim fi As Int = fd.I
+			Dim fce As Face = FR.Faces.Get(fi)
+
+			Dim za As Double = proj(fce.A*3+2), zb As Double = proj(fce.B*3+2), zc As Double = proj(fce.C*3+2)
+			If za < NearZ Or zb < NearZ Or zc < NearZ Then Continue
+			If za > FarZ Or zb > FarZ Or zc > FarZ Then Continue
+
+			Dim ax As Float = proj(fce.A*3+0), ay As Float = proj(fce.A*3+1)
+			Dim bx As Float = proj(fce.B*3+0), by As Float = proj(fce.B*3+1)
+			Dim cx As Float = proj(fce.C*3+0), cy As Float = proj(fce.C*3+1)
+
+			Dim nWorld As Vec3 = FR.FaceN.Get(fi)
+			Dim wa As Vec3 = FR.Verts.Get(fce.A), wb As Vec3 = FR.Verts.Get(fce.B), wc As Vec3 = FR.Verts.Get(fce.C)
+			Dim center As Vec3 = Math3D.V3((wa.X+wb.X+wc.X)/3, (wa.Y+wb.Y+wc.Y)/3, (wa.Z+wb.Z+wc.Z)/3)
+			Dim viewDir As Vec3 = Math3D.Normalize(Math3D.SubV(center, scene.Camera.Pos))
+			If opt.BackfaceCull And Math3D.Dot(nWorld, viewDir) >= 0 Then
+				culled = culled + 1
+				Continue
+			End If
+
+			Dim baseCol As Int
+			If opt.UseMaterialColors Then
+				baseCol = Colors.RGB(60,160,255)
+				Dim mi As Int = FR.FaceMat.Get(fi)
+				If mi >= 0 And mi < scene.Materials.Size Then
+					Dim mat As cMaterial = scene.Materials.Get(mi)
+					baseCol = mat.Albedo
+				End If
+			Else
+				baseCol = opt.FaceColor
+			End If
+
+			If opt.DrawFaces Then
+				Dim p As Path
+				p.Initialize(ax, ay)
+				p.LineTo(bx, by)
+				p.LineTo(cx, cy)
+				cvs.DrawPath(p, baseCol, True, 0)
+			End If
+
+			If opt.DrawEdges Then
+				cvs.DrawLine(ax, ay, bx, by, opt.EdgeColor, edgeWidth)
+				cvs.DrawLine(bx, by, cx, cy, opt.EdgeColor, edgeWidth)
+				cvs.DrawLine(cx, cy, ax, ay, opt.EdgeColor, edgeWidth)
+			End If
+
+			If opt.DrawVerts Then
+				cvs.DrawCircle(ax, ay, vertRadius, opt.VertexColor, True, 0)
+				cvs.DrawCircle(bx, by, vertRadius, opt.VertexColor, True, 0)
+				cvs.DrawCircle(cx, cy, vertRadius, opt.VertexColor, True, 0)
+			End If
+
+			drawn = drawn + 1
+		Next
+
+		stats.CulledFaces = culled
+		stats.DrawnFaces = drawn
+	End If
+
+	' overlays
+	Dim overlayStroke As Float = DipToCurrent(2)
+	If opt.ShowOriginAxes Then
+		Dim origin As Vec3 = Math3D.V3(0, 0, 0)
+		Dim axisScale As Double = 1
+		Dim sx As ScreenPoint = ProjectWorldPoint(origin, scene.Camera.Pos, right, upv, fwd, aspect, f, dstW, dstH)
+		If sx.Success Then
+			Dim axX As ScreenPoint = ProjectWorldPoint(Math3D.V3(axisScale, 0, 0), scene.Camera.Pos, right, upv, fwd, aspect, f, dstW, dstH)
+			Dim axY As ScreenPoint = ProjectWorldPoint(Math3D.V3(0, axisScale, 0), scene.Camera.Pos, right, upv, fwd, aspect, f, dstW, dstH)
+			Dim axZ As ScreenPoint = ProjectWorldPoint(Math3D.V3(0, 0, axisScale), scene.Camera.Pos, right, upv, fwd, aspect, f, dstW, dstH)
+			If axX.Success Then cvs.DrawLine(sx.X, sx.Y, axX.X, axX.Y, Colors.Red, overlayStroke)
+			If axY.Success Then cvs.DrawLine(sx.X, sx.Y, axY.X, axY.Y, Colors.Green, overlayStroke)
+			If axZ.Success Then cvs.DrawLine(sx.X, sx.Y, axZ.X, axZ.Y, Colors.Blue, overlayStroke)
+		End If
+	End If
+
+	If opt.ShowLights Then
+		Dim lightSize As Float = DipToCurrent(6)
+		For Each L As cLight In scene.Lights
+			If L.Enabled = False Then Continue
+			Dim base As Vec3
+			If L.Kind = L.KIND_DIRECTIONAL Then
+				Dim dir As Vec3 = Math3D.Normalize(Math3D.Mul(L.Direction, -1))
+				base = Math3D.AddV(scene.Camera.Pos, Math3D.Mul(dir, 5))
+			Else
+				base = L.Position
+			End If
+			Dim sp As ScreenPoint = ProjectWorldPoint(base, scene.Camera.Pos, right, upv, fwd, aspect, f, dstW, dstH)
+			If sp.Success Then
+				cvs.DrawCircle(sp.X, sp.Y, lightSize, L.Color, True, 0)
+				If L.Kind = L.KIND_DIRECTIONAL Then
+					Dim tip As Vec3 = Math3D.AddV(base, Math3D.Normalize(Math3D.Mul(L.Direction, -1)))
+					Dim spTip As ScreenPoint = ProjectWorldPoint(tip, scene.Camera.Pos, right, upv, fwd, aspect, f, dstW, dstH)
+					If spTip.Success Then cvs.DrawLine(sp.X, sp.Y, spTip.X, spTip.Y, L.Color, overlayStroke)
+				End If
+			End If
+		Next
+	End If
+
+	If opt.ShowCamera Then
+		Dim cx As Float = dstW / 2, cy As Float = dstH / 2
+		Dim half As Float = DipToCurrent(10)
+		Dim thin As Float = DipToCurrent(2)
+		cvs.DrawLine(cx - half, cy, cx + half, cy, Colors.White, thin)
+		cvs.DrawLine(cx, cy - half, cx, cy + half, Colors.White, thin)
+	End If
+
+	Dim t2 As Long = DateTime.Now
+	stats.BuildMs = t1 - t0
+	stats.RenderMs = t2 - t1
+	LastStats = stats
+	Return stats
+End Sub
+
+' Projects a point from world to screen and returns whether it is inside the clip range
+Private Sub ProjectWorldPoint(world As Vec3, camPos As Vec3, right As Vec3, upv As Vec3, fwd As Vec3, aspect As Double, f As Double, dstW As Int, dstH As Int) As ScreenPoint
+	Dim res As ScreenPoint
+	res.Initialize
+
+	Dim rel As Vec3 = Math3D.V3(world.X - camPos.X, world.Y - camPos.Y, world.Z - camPos.Z)
+	Dim cxx As Double = Math3D.Dot(rel, right)
+	Dim cyy As Double = Math3D.Dot(rel, upv)
+	Dim cz As Double = Math3D.Dot(rel, fwd)
+	res.Depth = cz
+
+	If cz < NearZ Or cz > FarZ Then Return res
+
+	Dim ndcX As Double = (cxx * f / aspect) / cz
+	Dim ndcY As Double = (cyy * f) / cz
+	res.X = (ndcX * 0.5 + 0.5) * dstW
+	res.Y = (-ndcY * 0.5 + 0.5) * dstH
+	res.Success = True
+	Return res
+End Sub
 ' --- RAY TRACE hook ---
 Public Sub RenderRaytrace(scene As cScene, Width As Int, Height As Int) As ResumableSub	
 	RT_Stat_TriTests = 0 : RT_Stat_AABBTests = 0 : RT_Stat_BVHNodesVisited = 0
