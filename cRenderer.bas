@@ -7,7 +7,7 @@ Version=13.4
 #IgnoreWarnings: 11, 9
 
 Sub Class_Globals
-	Type RenderOptions(BackfaceCull As Boolean, DrawFaces As Boolean, DrawEdges As Boolean, DrawVerts As Boolean, SmoothShading As Boolean)
+	Type RenderOptions(BackfaceCull As Boolean, DrawFaces As Boolean, DrawEdges As Boolean, DrawVerts As Boolean, SmoothShading As Boolean, UseMaterialColors As Boolean, FaceColor As Int, EdgeColor As Int, VertexColor As Int, EdgeThickness As Float, VertexSize As Float)
 	Type RenderStats(TotalFaces As Int, CulledFaces As Int, DrawnFaces As Int, BuildMs As Int, RenderMs As Int)
 	Type Ray(Origin As Vec3, Dir As Vec3)
 	Type Hit(T As Double, FaceIndex As Int, U As Double, V As Double)
@@ -15,6 +15,7 @@ Sub Class_Globals
 	
 	Public Const MODE_RASTER As Int = 0
 	Public Const MODE_RAYTRACE As Int = 1
+	Public Const MODE_PATHTRACE As Int = 2
 	Public RENDER_MODE As Int = 0
 	
 	
@@ -48,6 +49,8 @@ Sub Class_Globals
 	
 	Dim testTimer As Timer
 	Dim backgroundColor As Int = Colors.black
+	Public RayBackgroundColor As Int = Colors.Black
+	Public PathBackgroundColor As Int = Colors.Black
 	
 	' ===== BVH (Bounding Volume Hierarchy) =====
 	Private BVH_MinX As List, BVH_MinY As List, BVH_MinZ As List
@@ -89,7 +92,11 @@ Public Sub RenderRaster(cvs As Canvas, dstW As Int, dstH As Int, scene As cScene
 	stats.TotalFaces = nF
 
 	cvs.DrawColor(backgroundColor)
-
+	Dim edgeDip As Float = Max(0.5, opt.EdgeThickness)
+	Dim edgeWidth As Float = DipToCurrent(edgeDip)
+	Dim vertDip As Float = Max(0.5, opt.VertexSize)
+	Dim vertRadius As Float = DipToCurrent(vertDip)
+	
 	' (You commented the early exit; leaving it as you had it)
 	If nV = 0 Or nF = 0 Then
 '		cvs.DrawText("No geometry", dstW/2, dstH/2, Typeface.DEFAULT_BOLD, 22, Colors.White, "CENTER")
@@ -141,7 +148,7 @@ Public Sub RenderRaster(cvs As Canvas, dstW As Int, dstH As Int, scene As cScene
 	Dim useSmooth As Boolean = opt.SmoothShading
 
 	Dim pix() As Int, bmp As Bitmap, jbmp As JavaObject
-	If useSmooth Then
+	If useSmooth And opt.DrawFaces Then
 		pix = Math3D.CreateIntArray(dstW * dstH)
 		' clear to black (or whatever bg)
 		For ii = 0 To pix.Length - 1
@@ -179,25 +186,19 @@ Public Sub RenderRaster(cvs As Canvas, dstW As Int, dstH As Int, scene As cScene
 			Continue
 		End If
 		' material albedo
-		Dim baseCol As Int = Colors.RGB(60,160,255)
-		Dim mi As Int = FR.FaceMat.Get(fi)
-		If mi >= 0 And mi < scene.Materials.Size Then baseCol = scene.Materials.Get(mi).As(cMaterial).Albedo
+		Dim baseCol As Int 
+		If opt.UseMaterialColors Then
+			baseCol = Colors.RGB(60,160,255)
+			Dim mi As Int = FR.FaceMat.Get(fi)
+			If mi >= 0 And mi < scene.Materials.Size Then baseCol = scene.Materials.Get(mi).As(cMaterial).Albedo
+		Else 
+			baseCol = opt.FaceColor
+		End If
 		Dim ar As Double = Bit.And(Bit.ShiftRight(baseCol,16),255)/255.0
 		Dim ag As Double = Bit.And(Bit.ShiftRight(baseCol, 8),255)/255.0
 		Dim ab As Double = Bit.And(baseCol, 255)/255.0
 
-		If useSmooth Then
-			' ----- GOURAUD: per-vertex color -> interpolate -----
-			' material albedo
-			Dim baseCol As Int = Colors.RGB(60,160,255)
-			Dim mi As Int = FR.FaceMat.Get(fi)
-			If mi >= 0 And mi < scene.Materials.Size Then baseCol = scene.Materials.Get(mi).As(cMaterial).Albedo
-			Dim ar As Double = Bit.And(Bit.ShiftRight(baseCol,16),255)/255.0
-			Dim ag As Double = Bit.And(Bit.ShiftRight(baseCol,8),255)/255.0
-			Dim ab As Double = Bit.And(baseCol,255)/255.0
-
-			' light (normalize once outside loop)
-			' Dim Lm As Vec3 = Normalize(Mul(lightDir, -1))
+		If useSmooth And opt.DrawFaces Then
 
 			Dim idx As Int = fi * 3
 			Dim aN As Vec3 = FR.CornerN.Get(idx + 0)
@@ -216,7 +217,7 @@ Public Sub RenderRaster(cvs As Canvas, dstW As Int, dstH As Int, scene As cScene
 			drawn = drawn + 1
 
 		Else
-			' ----- your existing flat draw -----
+			
 			Dim intensity As Double = Max(0, Math3D.Dot(nWorld, Lm))
 			Dim k As Double = 0.2 + 0.8 * intensity
 			Dim fillCol As Int = Colors.RGB(Min(255, ar*255*k), Min(255, ag*255*k), Min(255, ab*255*k))
@@ -228,22 +229,22 @@ Public Sub RenderRaster(cvs As Canvas, dstW As Int, dstH As Int, scene As cScene
 			If opt.DrawFaces Then cvs.DrawPath(p, fillCol, True, 0)
 			If opt.DrawEdges Then
 				Dim edgeColor As Int = Colors.ARGB(220, 40, 40, 40)
-				cvs.DrawLine(ax, ay, bx, by, edgeColor, 2)
-				cvs.DrawLine(bx, by, cx, cy, edgeColor, 2)
-				cvs.DrawLine(cx, cy, ax, ay, edgeColor, 2)
+				cvs.DrawLine(ax, ay, bx, by, edgeColor, edgeWidth)
+				cvs.DrawLine(bx, by, cx, cy, edgeColor, edgeWidth)
+				cvs.DrawLine(cx, cy, ax, ay, edgeColor, edgeWidth)
 			End If
 			If opt.DrawVerts Then
 				Dim vc As Int = Colors.Yellow
-				cvs.DrawCircle(ax, ay, 3dip, vc, True, 0)
-				cvs.DrawCircle(bx, by, 3dip, vc, True, 0)
-				cvs.DrawCircle(cx, cy, 3dip, vc, True, 0)
+				cvs.DrawCircle(ax, ay, vertRadius, vc, True, 0)
+				cvs.DrawCircle(bx, by, vertRadius, vc, True, 0)
+				cvs.DrawCircle(cx, cy, vertRadius, vc, True, 0)
 			End If
 			
 			drawn = drawn + 1
 		End If
 	Next
 	
-	If useSmooth Then
+	If useSmooth And opt.DrawFaces Then
 		Dim bmp As Bitmap
 		bmp.InitializeMutable(dstW, dstH)
 		Dim jbmp As JavaObject = bmp
@@ -599,10 +600,14 @@ Private Sub Reflect(dir As Vec3, n As Vec3) As Vec3
 End Sub
 
 Private Sub Background(d As Vec3) As Vec3
-	' simple sky gradient
-'	Dim t As Double = (d.Y + 1) * 0.5
-'	Return Math3D.V3(0.05*(1-t)+0.5*t, 0.05*(1-t)+0.7*t, 0.08*(1-t)+1.0*t)
-	Return Math3D.V3(0, 0, 0)
+	Return ColorToVec3(RayBackgroundColor)
+End Sub
+
+Private Sub ColorToVec3(col As Int) As Vec3
+	Dim r As Double = Bit.And(Bit.ShiftRight(col, 16), 255) / 255.0
+	Dim g As Double = Bit.And(Bit.ShiftRight(col, 8), 255) / 255.0
+	Dim b As Double = Bit.And(col, 255) / 255.0
+	Return Math3D.V3(r, g, b)
 End Sub
 
 Private Sub TraceColor(r As Ray, depth As Int, v As List, f As List, fn As List, refl As List) As Vec3
@@ -1152,7 +1157,8 @@ Public Sub RenderPathTrace(scene As cScene, dstW As Int, dstH As Int, spp As Int
 				For bounce = 0 To maxBounces - 1
 					Dim h As Hit = TraceRay_BVH(ray, RT_Verts, RT_Faces)
 					If h.FaceIndex < 0 Then
-						' background is black -> nothing to add
+						Dim miss As Vec3 = ColorToVec3(PathBackgroundColor)
+						col = Math3D.AddV(col, Math3D.V3(throughput.X * miss.X, throughput.Y * miss.Y, throughput.Z * miss.Z))
 						Exit
 					End If
 

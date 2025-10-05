@@ -65,6 +65,12 @@ Sub Process_Globals
 	
 	Public ScenePresetLoaded As Boolean = False
 	Public CurrentScenePresetName As String = ""
+	Public RaytraceResolutionScale As Float = 0.1
+	Public RaytraceVoidColor As Int = Colors.Black
+	Public PathTraceSamples As Int = 2
+	Public PathTraceBounces As Int = 3
+	Public PathTraceVoidColor As Int = Colors.Black
+	
 End Sub
 
 Sub Globals
@@ -102,10 +108,19 @@ Sub Activity_Create(FirstTime As Boolean)
 	CurrentScenePresetName = ""
 	
 	Renderer.Initialize
-	Opt.BackfaceCull = True : Opt.DrawFaces = True : Opt.DrawEdges = False : Opt.DrawVerts = False : Opt.SmoothShading = False	
+	Opt.BackfaceCull = True : Opt.DrawFaces = True : Opt.DrawEdges = False : Opt.DrawVerts = False : Opt.SmoothShading = False
+	Opt.UseMaterialColors = True
+	Opt.FaceColor = Colors.RGB(60, 160, 255)
+	Opt.EdgeColor = Colors.ARGB(220, 40, 40, 40)
+	Opt.VertexColor = Colors.Yellow
+	Opt.EdgeThickness = 2
+	Opt.VertexSize = 3
 	
-
 	cvs.Initialize(pnl)
+	
+	Renderer.RayBackgroundColor = RaytraceVoidColor
+	Renderer.PathBackgroundColor = PathTraceVoidColor
+	
 	
 '	========= RENDER ==========
 
@@ -147,10 +162,13 @@ Sub timer_Tick
 
 '	RenderRaster
 
-	If Renderer.RENDER_MODE = 0 Then
+	If Renderer.RENDER_MODE = Renderer.MODE_RASTER Then
 		Renderer.RenderRaster(cvs, pnl.Width, pnl.Height, Scene, Opt)
-	else if Renderer.RENDER_MODE = 1 And Not(Renderer.testTimer.Enabled) Then
+	else if Renderer.RENDER_MODE = Renderer.MODE_RAYTRACE And Not(Renderer.testTimer.Enabled) Then
 		renderRaytraced
+	Else If Renderer.RENDER_MODE = Renderer.MODE_PATHTRACE Then
+		' Path trace renders are triggered manually via resetTimer / UI
+		' Path trace is still too slow
 	End If
 	pnl.Invalidate
 	
@@ -165,14 +183,22 @@ End Sub
 
 Public Sub resetTimer
 	remFrames = 10
-	Timer.Enabled = True
+	If Renderer.RENDER_MODE = Renderer.MODE_PATHTRACE Then
+		Timer.Enabled = False
+		CallSubDelayed(Me, "pathtrace")
+	Else
+		Timer.Enabled = True
+	End If
 End Sub
 
 public Sub renderRaytraced
 	Timer.Enabled = False
 	
-	
-	Dim raytrace As ResumableSub = Renderer.RenderRaytrace(Scene, pnl.Width/10, pnl.Height/10)
+	Dim scale As Float = Max(0.1, Min(1, RaytraceResolutionScale))
+	Dim renderW As Int = Max(1, Ceil(pnl.Width * scale))
+	Dim renderH As Int = Max(1, Ceil(pnl.Height * scale))
+	Renderer.RayBackgroundColor = RaytraceVoidColor
+	Dim raytrace As ResumableSub = Renderer.RenderRaytrace(Scene, renderW, renderH)
 	Wait For (raytrace) Complete (bmp As Bitmap)
 	Dim rect As Rect : rect.Initialize(0, 0, 100%x, 100%y)
 	cvs.DrawBitmap(bmp, Null, rect)
@@ -189,7 +215,10 @@ End Sub
 Public Sub pathtrace
 	Timer.Enabled = False
 	Log("START == PathTrace")
-	Dim bmp As Bitmap = Renderer.RenderPathTrace(Scene, pnl.Width, pnl.Height, 2, 3)   ' spp=1, maxBounces=3
+	Dim samples As Int = Max(1, PathTraceSamples)
+	Dim bounces As Int = Max(1, PathTraceBounces)
+	Renderer.PathBackgroundColor = PathTraceVoidColor
+	Dim bmp As Bitmap = Renderer.RenderPathTrace(Scene, pnl.Width, pnl.Height, samples, bounces)
 	cvs.DrawColor(Colors.Black)
 	Dim dst As Rect : dst.Initialize(0, 0, pnl.Width, pnl.Height)
 	cvs.DrawBitmap(bmp, Null, dst)

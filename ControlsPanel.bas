@@ -46,6 +46,37 @@ Sub Class_Globals
 	Dim txtPresetName As EditText
 	Dim presetsListPanel As Panel
 	Dim btnSavePreset As Button
+	
+	Dim btnRenderSettings As Button
+	Dim spnRenderMode As Spinner
+	Dim pnlRenderSolid As Panel
+	Dim pnlRenderRay As Panel
+	Dim pnlRenderPath As Panel
+	Dim chkSolidSmoothShading As CheckBox
+	Dim chkSolidDrawFaces As CheckBox
+	Dim chkSolidDrawEdges As CheckBox
+	Dim chkSolidDrawVerts As CheckBox
+	Dim chkSolidUseMaterialColors As CheckBox
+	Dim txtSolidFaceColor As EditText
+	Dim txtSolidEdgeColor As EditText
+	Dim txtSolidVertexColor As EditText
+	Dim pnlSolidFaceColorPreview As Panel
+	Dim pnlSolidEdgeColorPreview As Panel
+	Dim pnlSolidVertexColorPreview As Panel
+	Dim sldSolidEdgeThickness As SliderView
+	Dim sldSolidVertexSize As SliderView
+	Dim spnRayResolution As Spinner
+	Dim chkRayUseBVH As CheckBox
+	Dim txtRayBounces As EditText
+	Dim txtRayVoidColor As EditText
+	Dim pnlRayVoidColorPreview As Panel
+	Dim txtPathSamples As EditText
+	Dim txtPathBounces As EditText
+	Dim txtPathVoidColor As EditText
+	Dim pnlPathVoidColorPreview As Panel
+	Dim btnPathTraceRender As Button
+	Dim renderSettingsUpdating As Boolean
+	Dim renderResolutionValues As List
 End Sub
 
 'Initializes the object. You can add parameters to this method if needed.
@@ -79,8 +110,10 @@ Public Sub build
 	popoverPresets.panelmain.BringToFront
 	
 '	render settings
-	popoverRenderSettings = CreatePopover("asd")
+	popoverRenderSettings = CreatePopover("renderSettings")
+	build_PopoverRenderSettings
 	popoverCamSettings.panelmain.BringToFront 'for now popover is separate, should become a layout in objSettings maybe
+	popoverRenderSettings.panelmain.BringToFront
 	
 	Dim btnRenderWire As Button
 	btnRenderWire.Initialize("RenderWire")
@@ -111,40 +144,17 @@ Public Sub build
 	btnRenderShaded.TextSize = 30
 	btnRenderShaded.Typeface = Typeface.DEFAULT_BOLD
 	
-
-	Dim btnEnableSmoothShade As Button
-	btnEnableSmoothShade.Initialize("enableSmoothShade")
-	panelmain.AddView(btnEnableSmoothShade, UI.Right(btnRenderShaded) + 4dip, 4dip, 10%x, 10%x)
-	btnEnableSmoothShade.Background = UI.GetDrawable(Colors.White, btnEnableSmoothShade.Height)
-	btnEnableSmoothShade.Text = "M" ' todo make panel with button and label and camera icon
-	btnEnableSmoothShade.Padding = Array As Int(0, 0, 0, 0)
-	btnEnableSmoothShade.TextSize = 30
-	btnEnableSmoothShade.Typeface = Typeface.DEFAULT_BOLD
-	
-	Dim btnenableBVH As Button
-	btnenableBVH.Initialize("enableBVH")
-	panelmain.AddView(btnenableBVH, UI.Right(btnEnableSmoothShade) + 4dip, 4dip, 10%x, 10%x)
-	btnenableBVH.Background = UI.GetDrawable(Colors.green, btnenableBVH.Height)
-	btnenableBVH.Text = "B" ' todo make panel with button and label and camera icon
-	btnenableBVH.TextColor = Colors.White
-	btnenableBVH.Padding = Array As Int(0, 0, 0, 0)
-	btnenableBVH.TextSize = 30
-	btnenableBVH.Typeface = Typeface.DEFAULT_BOLD
-	
-
-	Dim btnpathTrace As Button
-	btnpathTrace.Initialize("renderPathTrace")
-	panelmain.AddView(btnpathTrace, UI.Right(btnenableBVH) + 4dip, 4dip, 10%x, 10%x)
-	btnpathTrace.Background = UI.GetDrawable(Colors.green, btnpathTrace.Height)
-	btnpathTrace.Text = "P" ' todo make panel with button and label and camera icon
-	btnpathTrace.TextColor = Colors.White
-	btnpathTrace.Padding = Array As Int(0, 0, 0, 0)
-	btnpathTrace.TextSize = 30
-	btnpathTrace.Typeface = Typeface.DEFAULT_BOLD
+	btnRenderSettings.Initialize("btnRenderSettings")
+	panelmain.AddView(btnRenderSettings, UI.Right(btnRenderShaded) + 4dip, 4dip, 20%x, 10%x)
+	btnRenderSettings.Background = UI.GetDrawable(Colors.White, btnRenderSettings.Height)
+	btnRenderSettings.Text = "Render"
+	btnRenderSettings.Padding = Array As Int(0, 0, 0, 0)
+	btnRenderSettings.TextSize = 20
+	btnRenderSettings.Typeface = Typeface.DEFAULT_BOLD
 	
 	Dim btnPresets As Button
 	btnPresets.Initialize("btnPresets")
-	panelmain.AddView(btnPresets, UI.Right(btnpathTrace) + 4dip, 4dip, 18%x, 10%x)
+	panelmain.AddView(btnPresets, UI.Right(btnRenderSettings) + 4dip, 4dip, 18%x, 10%x)
 	btnPresets.Background = UI.GetDrawable(Colors.White, btnPresets.Height)
 	btnPresets.Text = "Scenes"
 	btnPresets.Padding = Array As Int(0, 0, 0, 0)
@@ -209,6 +219,177 @@ Sub RenderShaded_Click
 	CallSub(Main, "resetTimer")
 End Sub
 
+
+Sub btnRenderSettings_Click
+	UpdateRenderSettingsUI
+	popoverRenderSettings.ShowPanel
+End Sub
+
+Sub spnRenderMode_ItemClick (Position As Int, Value As Object)
+	If renderSettingsUpdating Then Return
+	Dim mode As Int
+	Select Position
+		Case 0
+			mode = Main.Renderer.MODE_RASTER
+		Case 1
+			mode = Main.Renderer.MODE_RAYTRACE
+		Case 2
+			mode = Main.Renderer.MODE_PATHTRACE
+		Case Else
+			mode = Main.Renderer.MODE_RASTER
+	End Select
+	Main.Renderer.setRenderMode(mode)
+	UpdateRenderModePanels(mode)
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub chkSolidSmoothShading_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.Opt.SmoothShading = Checked
+	UpdateSolidSettingsEnabled
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub chkSolidUseMaterialColors_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.Opt.UseMaterialColors = Checked
+	UpdateSolidSettingsEnabled
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub chkSolidDrawFaces_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.Opt.DrawFaces = Checked
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub chkSolidDrawEdges_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.Opt.DrawEdges = Checked
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub chkSolidDrawVerts_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.Opt.DrawVerts = Checked
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub txtSolidFaceColor_TextChanged (Old As String, New As String)
+	If renderSettingsUpdating Then Return
+	Dim parsed As Object = ParseColorOrNull(New)
+	If parsed Is Int Then
+		Dim color As Int = parsed
+		Main.Opt.FaceColor = color
+		If pnlSolidFaceColorPreview.IsInitialized Then pnlSolidFaceColorPreview.Color = color
+		If Not(chkSolidUseMaterialColors.Checked) Then CallSub(Main, "resetTimer")
+	End If
+End Sub
+
+Sub txtSolidEdgeColor_TextChanged (Old As String, New As String)
+	If renderSettingsUpdating Then Return
+	Dim parsed As Object = ParseColorOrNull(New)
+	If parsed Is Int Then
+		Dim color As Int = parsed
+		Main.Opt.EdgeColor = color
+		If pnlSolidEdgeColorPreview.IsInitialized Then pnlSolidEdgeColorPreview.Color = color
+		CallSub(Main, "resetTimer")
+	End If
+End Sub
+
+Sub txtSolidVertexColor_TextChanged (Old As String, New As String)
+	If renderSettingsUpdating Then Return
+	Dim parsed As Object = ParseColorOrNull(New)
+	If parsed Is Int Then
+		Dim color As Int = parsed
+		Main.Opt.VertexColor = color
+		If pnlSolidVertexColorPreview.IsInitialized Then pnlSolidVertexColorPreview.Color = color
+		CallSub(Main, "resetTimer")
+	End If
+End Sub
+
+Sub sldSolidEdgeThickness_ValueChanged(m As Map)
+	If renderSettingsUpdating Then Return
+	Dim value As Float = m.Get("Value")
+	Main.Opt.EdgeThickness = value
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub sldSolidVertexSize_ValueChanged(m As Map)
+	If renderSettingsUpdating Then Return
+	Dim value As Float = m.Get("Value")
+	Main.Opt.VertexSize = value
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub spnRayResolution_ItemClick (Position As Int, Value As Object)
+	If renderSettingsUpdating Then Return
+	If renderResolutionValues.IsInitialized = False Then Return
+	If Position < 0 Or Position >= renderResolutionValues.Size Then Return
+	Dim scale As Double = renderResolutionValues.Get(Position)
+	Main.RaytraceResolutionScale = scale
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub chkRayUseBVH_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.Renderer.UseBVH = Checked
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub txtRayBounces_TextChanged (Old As String, New As String)
+	If renderSettingsUpdating Then Return
+	Dim trimmed As String = New.Trim
+	If trimmed.Length = 0 Then Return
+	If IsNumber(trimmed) = False Then Return
+	Dim value As Int = Max(1, trimmed)
+	Main.Renderer.RT_MaxDepth = value
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub txtRayVoidColor_TextChanged (Old As String, New As String)
+	If renderSettingsUpdating Then Return
+	Dim parsed As Object = ParseColorOrNull(New)
+	If parsed Is Int Then
+		Dim color As Int = parsed
+		Main.RaytraceVoidColor = color
+		Main.Renderer.RayBackgroundColor = color
+		If pnlRayVoidColorPreview.IsInitialized Then pnlRayVoidColorPreview.Color = color
+		CallSub(Main, "resetTimer")
+	End If
+End Sub
+
+Sub txtPathSamples_TextChanged (Old As String, New As String)
+	If renderSettingsUpdating Then Return
+	Dim trimmed As String = New.Trim
+	If trimmed.Length = 0 Then Return
+	If IsNumber(trimmed) = False Then Return
+	Dim value As Int = Max(1, trimmed)
+	Main.PathTraceSamples = value
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub txtPathBounces_TextChanged (Old As String, New As String)
+	If renderSettingsUpdating Then Return
+	Dim trimmed As String = New.Trim
+	If trimmed.Length = 0 Then Return
+	If IsNumber(trimmed) = False Then Return
+	Dim value As Int = Max(1, trimmed)
+	Main.PathTraceBounces = value
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub txtPathVoidColor_TextChanged (Old As String, New As String)
+	If renderSettingsUpdating Then Return
+	Dim parsed As Object = ParseColorOrNull(New)
+	If parsed Is Int Then
+		Dim color As Int = parsed
+		Main.PathTraceVoidColor = color
+		Main.Renderer.PathBackgroundColor = color
+		If pnlPathVoidColorPreview.IsInitialized Then pnlPathVoidColorPreview.Color = color
+		CallSub(Main, "resetTimer")
+	End If
+End Sub
 
 Sub enableSmoothShade_Click
 	Main.Opt.SmoothShading = Not(Main.Opt.SmoothShading)
@@ -375,7 +556,396 @@ public Sub objectsList_SettingsClick
 End Sub
 
 public Sub build_PopoverRenderSettings
-	popoverRenderSettings.Title = "Viewport Settings"
+	popoverRenderSettings.Title = "Render Settings"
+
+	Dim content As Panel = popoverRenderSettings.containerPanel.Panel
+	content.RemoveAllViews
+	content.Color = Colors.Transparent
+
+	Dim padding As Int = 12dip
+
+	spnRenderMode.Initialize("spnRenderMode")
+	content.AddView(spnRenderMode, padding, padding, popoverRenderSettings.containerPanel.Width - padding * 2, 40dip)
+	spnRenderMode.AddAll(Array As String("Solid (Raster)", "Ray Trace", "Path Trace"))
+
+	pnlRenderSolid.Initialize("")
+	pnlRenderSolid.Color = Colors.Transparent
+	content.AddView(pnlRenderSolid, 0, spnRenderMode.Top + spnRenderMode.Height + padding, popoverRenderSettings.containerPanel.Width, 0)
+	BuildSolidRenderSettings(pnlRenderSolid, padding)
+
+	pnlRenderRay.Initialize("")
+	pnlRenderRay.Color = Colors.Transparent
+	content.AddView(pnlRenderRay, 0, pnlRenderSolid.Top, popoverRenderSettings.containerPanel.Width, 0)
+	BuildRayTraceSettings(pnlRenderRay, padding)
+
+	pnlRenderPath.Initialize("")
+	pnlRenderPath.Color = Colors.Transparent
+	content.AddView(pnlRenderPath, 0, pnlRenderSolid.Top, popoverRenderSettings.containerPanel.Width, 0)
+	BuildPathTraceSettings(pnlRenderPath, padding)
+
+	renderResolutionValues.Initialize2(Array As Object(1.0, 0.75, 0.5, 0.25, 0.1))
+
+	UpdateRenderSettingsUI
+End Sub
+
+Private Sub BuildSolidRenderSettings(parent As Panel, padding As Int)
+	parent.RemoveAllViews
+	Dim top As Int = 0
+
+	chkSolidSmoothShading.Initialize("chkSolidSmoothShading")
+	chkSolidSmoothShading.Text = "Smooth Shading"
+	chkSolidSmoothShading.TextSize = 16
+	parent.AddView(chkSolidSmoothShading, padding, top, parent.Width - padding * 2, 40dip)
+	top = top + 40dip + SmallSpaceing
+
+	chkSolidUseMaterialColors.Initialize("chkSolidUseMaterialColors")
+	chkSolidUseMaterialColors.Text = "Use Material Colors"
+	chkSolidUseMaterialColors.TextSize = 16
+	parent.AddView(chkSolidUseMaterialColors, padding, top, parent.Width - padding * 2, 40dip)
+	top = top + 40dip + SmallSpaceing
+
+	chkSolidDrawFaces.Initialize("chkSolidDrawFaces")
+	chkSolidDrawFaces.Text = "Draw Faces"
+	chkSolidDrawFaces.TextSize = 16
+	parent.AddView(chkSolidDrawFaces, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	chkSolidDrawEdges.Initialize("chkSolidDrawEdges")
+	chkSolidDrawEdges.Text = "Draw Edges"
+	chkSolidDrawEdges.TextSize = 16
+	parent.AddView(chkSolidDrawEdges, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	chkSolidDrawVerts.Initialize("chkSolidDrawVerts")
+	chkSolidDrawVerts.Text = "Draw Vertices"
+	chkSolidDrawVerts.TextSize = 16
+	parent.AddView(chkSolidDrawVerts, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + BigSpaceing
+
+	Dim lblFace As Label
+	lblFace.Initialize("")
+	lblFace.Text = "Face Color (#RRGGBB)"
+	lblFace.TextSize = 14
+	lblFace.TextColor = Colors.Black
+	parent.AddView(lblFace, padding, top, parent.Width - padding * 2, 20dip)
+	top = top + 20dip + SmallSpaceing
+
+	txtSolidFaceColor.Initialize("txtSolidFaceColor")
+	StyleTextField(txtSolidFaceColor)
+	parent.AddView(txtSolidFaceColor, padding, top, parent.Width - padding * 3 - 40dip, 36dip)
+	pnlSolidFaceColorPreview.Initialize("")
+	pnlSolidFaceColorPreview.Background = UI.GetDrawableWithBorder(Colors.White, 6dip, 1dip, Colors.LightGray)
+	pnlSolidFaceColorPreview.Color = Colors.Black
+	parent.AddView(pnlSolidFaceColorPreview, parent.Width - padding - 40dip, top, 40dip, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	Dim lblEdge As Label
+	lblEdge.Initialize("")
+	lblEdge.Text = "Edge Color (#RRGGBB)"
+	lblEdge.TextSize = 14
+	lblEdge.TextColor = Colors.Black
+	parent.AddView(lblEdge, padding, top, parent.Width - padding * 2, 20dip)
+	top = top + 20dip + SmallSpaceing
+
+	txtSolidEdgeColor.Initialize("txtSolidEdgeColor")
+	StyleTextField(txtSolidEdgeColor)
+	parent.AddView(txtSolidEdgeColor, padding, top, parent.Width - padding * 3 - 40dip, 36dip)
+	pnlSolidEdgeColorPreview.Initialize("")
+	pnlSolidEdgeColorPreview.Background = UI.GetDrawableWithBorder(Colors.White, 6dip, 1dip, Colors.LightGray)
+	pnlSolidEdgeColorPreview.Color = Colors.Black
+	parent.AddView(pnlSolidEdgeColorPreview, parent.Width - padding - 40dip, top, 40dip, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	Dim lblVert As Label
+	lblVert.Initialize("")
+	lblVert.Text = "Vertex Color (#RRGGBB)"
+	lblVert.TextSize = 14
+	lblVert.TextColor = Colors.Black
+	parent.AddView(lblVert, padding, top, parent.Width - padding * 2, 20dip)
+	top = top + 20dip + SmallSpaceing
+
+	txtSolidVertexColor.Initialize("txtSolidVertexColor")
+	StyleTextField(txtSolidVertexColor)
+	parent.AddView(txtSolidVertexColor, padding, top, parent.Width - padding * 3 - 40dip, 36dip)
+	pnlSolidVertexColorPreview.Initialize("")
+	pnlSolidVertexColorPreview.Background = UI.GetDrawableWithBorder(Colors.White, 6dip, 1dip, Colors.LightGray)
+	pnlSolidVertexColorPreview.Color = Colors.Black
+	parent.AddView(pnlSolidVertexColorPreview, parent.Width - padding - 40dip, top, 40dip, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	sldSolidEdgeThickness.Initialize(Me, "sldSolidEdgeThickness")
+	sldSolidEdgeThickness.AddToParent(parent, padding, top, parent.Width - padding * 2, 80dip)
+	sldSolidEdgeThickness.setTitle("Edge Thickness (dip)")
+	top = UI.Bottom(sldSolidEdgeThickness.panelmain) + SmallSpaceing
+
+	sldSolidVertexSize.Initialize(Me, "sldSolidVertexSize")
+	sldSolidVertexSize.AddToParent(parent, padding, top, parent.Width - padding * 2, 80dip)
+	sldSolidVertexSize.setTitle("Vertex Size (dip)")
+	top = UI.Bottom(sldSolidVertexSize.panelmain) + padding
+
+	parent.Height = top
+End Sub
+
+Private Sub BuildRayTraceSettings(parent As Panel, padding As Int)
+	parent.RemoveAllViews
+	Dim top As Int = 0
+
+	Dim lblRes As Label
+	lblRes.Initialize("")
+	lblRes.Text = "Resolution"
+	lblRes.TextSize = 14
+	lblRes.TextColor = Colors.Black
+	parent.AddView(lblRes, padding, top, parent.Width - padding * 2, 20dip)
+	top = top + 20dip + SmallSpaceing
+
+	spnRayResolution.Initialize("spnRayResolution")
+	parent.AddView(spnRayResolution, padding, top, parent.Width - padding * 2, 40dip)
+	spnRayResolution.AddAll(Array As String("100%", "75%", "50%", "25%", "10%"))
+	top = top + 40dip + SmallSpaceing
+
+	chkRayUseBVH.Initialize("chkRayUseBVH")
+	chkRayUseBVH.Text = "Use BVH Acceleration"
+	chkRayUseBVH.TextSize = 16
+	parent.AddView(chkRayUseBVH, padding, top, parent.Width - padding * 2, 40dip)
+	top = top + 40dip + SmallSpaceing
+
+	Dim lblBounces As Label
+	lblBounces.Initialize("")
+	lblBounces.Text = "Ray Bounces"
+	lblBounces.TextSize = 14
+	lblBounces.TextColor = Colors.Black
+	parent.AddView(lblBounces, padding, top, parent.Width - padding * 2, 20dip)
+	top = top + 20dip + SmallSpaceing
+
+	txtRayBounces.Initialize("txtRayBounces")
+	StyleTextField(txtRayBounces)
+	txtRayBounces.InputType = txtRayBounces.INPUT_TYPE_NUMBERS
+	parent.AddView(txtRayBounces, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	Dim lblRayVoid As Label
+	lblRayVoid.Initialize("")
+	lblRayVoid.Text = "Void Color (#RRGGBB)"
+	lblRayVoid.TextSize = 14
+	lblRayVoid.TextColor = Colors.Black
+	parent.AddView(lblRayVoid, padding, top, parent.Width - padding * 2, 20dip)
+	top = top + 20dip + SmallSpaceing
+
+	txtRayVoidColor.Initialize("txtRayVoidColor")
+	StyleTextField(txtRayVoidColor)
+	parent.AddView(txtRayVoidColor, padding, top, parent.Width - padding * 3 - 40dip, 36dip)
+	pnlRayVoidColorPreview.Initialize("")
+	pnlRayVoidColorPreview.Background = UI.GetDrawableWithBorder(Colors.White, 6dip, 1dip, Colors.LightGray)
+	pnlRayVoidColorPreview.Color = Colors.Black
+	parent.AddView(pnlRayVoidColorPreview, parent.Width - padding - 40dip, top, 40dip, 36dip)
+	top = top + 36dip + padding
+
+	parent.Height = top
+End Sub
+
+Private Sub BuildPathTraceSettings(parent As Panel, padding As Int)
+	parent.RemoveAllViews
+	Dim top As Int = 0
+
+	Dim lblSamples As Label
+	lblSamples.Initialize("")
+	lblSamples.Text = "Samples Per Pixel"
+	lblSamples.TextSize = 14
+	lblSamples.TextColor = Colors.Black
+	parent.AddView(lblSamples, padding, top, parent.Width - padding * 2, 20dip)
+	top = top + 20dip + SmallSpaceing
+
+	txtPathSamples.Initialize("txtPathSamples")
+	StyleTextField(txtPathSamples)
+	txtPathSamples.InputType = txtPathSamples.INPUT_TYPE_NUMBERS
+	parent.AddView(txtPathSamples, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	Dim lblPathBounces As Label
+	lblPathBounces.Initialize("")
+	lblPathBounces.Text = "Ray Bounces"
+	lblPathBounces.TextSize = 14
+	lblPathBounces.TextColor = Colors.Black
+	parent.AddView(lblPathBounces, padding, top, parent.Width - padding * 2, 20dip)
+	top = top + 20dip + SmallSpaceing
+
+	txtPathBounces.Initialize("txtPathBounces")
+	StyleTextField(txtPathBounces)
+	txtPathBounces.InputType = txtPathBounces.INPUT_TYPE_NUMBERS
+	parent.AddView(txtPathBounces, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	Dim lblPathVoid As Label
+	lblPathVoid.Initialize("")
+	lblPathVoid.Text = "Void Color (#RRGGBB)"
+	lblPathVoid.TextSize = 14
+	lblPathVoid.TextColor = Colors.Black
+	parent.AddView(lblPathVoid, padding, top, parent.Width - padding * 2, 20dip)
+	top = top + 20dip + SmallSpaceing
+
+	txtPathVoidColor.Initialize("txtPathVoidColor")
+	StyleTextField(txtPathVoidColor)
+	parent.AddView(txtPathVoidColor, padding, top, parent.Width - padding * 3 - 40dip, 36dip)
+	pnlPathVoidColorPreview.Initialize("")
+	pnlPathVoidColorPreview.Background = UI.GetDrawableWithBorder(Colors.White, 6dip, 1dip, Colors.LightGray)
+	pnlPathVoidColorPreview.Color = Colors.Black
+	parent.AddView(pnlPathVoidColorPreview, parent.Width - padding - 40dip, top, 40dip, 36dip)
+	top = top + 36dip + BigSpaceing
+
+	btnPathTraceRender.Initialize("renderPathTrace")
+	parent.AddView(btnPathTraceRender, padding, top, parent.Width - padding * 2, 44dip)
+	btnPathTraceRender.Text = "Render Path Trace"
+	btnPathTraceRender.Typeface = Typeface.DEFAULT_BOLD
+	btnPathTraceRender.TextSize = 16
+	btnPathTraceRender.TextColor = Colors.White
+	btnPathTraceRender.Gravity = Gravity.CENTER
+	btnPathTraceRender.Background = UI.GetDrawable(Colors.RGB(76, 175, 80), btnPathTraceRender.Height)
+	top = top + 44dip + padding
+
+	parent.Height = top
+End Sub
+
+Private Sub StyleTextField(et As EditText)
+	et.TextSize = 16
+	et.TextColor = Colors.Black
+	et.Color = Colors.White
+	et.SingleLine = True
+	et.Padding = Array As Int(6dip, 0, 6dip, 0)
+	et.Background = UI.GetDrawableWithBorder(Colors.White, 6dip, 1dip, Colors.LightGray)
+End Sub
+
+Private Sub UpdateRenderSettingsUI
+	If popoverRenderSettings.IsInitialized = False Then Return
+	If spnRenderMode.IsInitialized = False Then Return
+	renderSettingsUpdating = True
+
+	Dim mode As Int = Main.Renderer.RENDER_MODE
+	If mode < 0 Then mode = 0
+	If spnRenderMode.Size > mode Then
+		spnRenderMode.SelectedIndex = mode
+	Else If spnRenderMode.Size > 0 Then
+		spnRenderMode.SelectedIndex = 0
+		mode = 0
+	End If
+
+	If chkSolidSmoothShading.IsInitialized Then chkSolidSmoothShading.Checked = Main.Opt.SmoothShading
+	If chkSolidUseMaterialColors.IsInitialized Then chkSolidUseMaterialColors.Checked = Main.Opt.UseMaterialColors
+	If chkSolidDrawFaces.IsInitialized Then chkSolidDrawFaces.Checked = Main.Opt.DrawFaces
+	If chkSolidDrawEdges.IsInitialized Then chkSolidDrawEdges.Checked = Main.Opt.DrawEdges
+	If chkSolidDrawVerts.IsInitialized Then chkSolidDrawVerts.Checked = Main.Opt.DrawVerts
+	If txtSolidFaceColor.IsInitialized Then txtSolidFaceColor.Text = FormatColor(Main.Opt.FaceColor)
+	If pnlSolidFaceColorPreview.IsInitialized Then pnlSolidFaceColorPreview.Color = Main.Opt.FaceColor
+	If txtSolidEdgeColor.IsInitialized Then txtSolidEdgeColor.Text = FormatColor(Main.Opt.EdgeColor)
+	If pnlSolidEdgeColorPreview.IsInitialized Then pnlSolidEdgeColorPreview.Color = Main.Opt.EdgeColor
+	If txtSolidVertexColor.IsInitialized Then txtSolidVertexColor.Text = FormatColor(Main.Opt.VertexColor)
+	If pnlSolidVertexColorPreview.IsInitialized Then pnlSolidVertexColorPreview.Color = Main.Opt.VertexColor
+	If sldSolidEdgeThickness.IsInitialized Then
+		sldSolidEdgeThickness.SetRange(0.5, 10)
+		sldSolidEdgeThickness.SetValue(Main.Opt.EdgeThickness, False)
+	End If
+	If sldSolidVertexSize.IsInitialized Then
+		sldSolidVertexSize.SetRange(0.5, 12)
+		sldSolidVertexSize.SetValue(Main.Opt.VertexSize, False)
+	End If
+
+	If renderResolutionValues.IsInitialized = False Then renderResolutionValues.Initialize2(Array As Object(1.0, 0.75, 0.5, 0.25, 0.1))
+	If spnRayResolution.IsInitialized And spnRayResolution.Size > 0 Then
+		Dim scale As Double = Main.RaytraceResolutionScale
+		Dim bestIdx As Int = 0
+		Dim bestDiff As Double = 999
+		Dim i As Int
+		For i = 0 To renderResolutionValues.Size - 1
+			Dim val As Double = renderResolutionValues.Get(i)
+			Dim diff As Double = Abs(val - scale)
+			If diff < bestDiff Then
+				bestDiff = diff
+				bestIdx = i
+			End If
+		Next
+		If bestIdx >= 0 And bestIdx < spnRayResolution.Size Then spnRayResolution.SelectedIndex = bestIdx
+	End If
+	If chkRayUseBVH.IsInitialized Then chkRayUseBVH.Checked = Main.Renderer.UseBVH
+	If txtRayBounces.IsInitialized Then txtRayBounces.Text = Main.Renderer.RT_MaxDepth
+	If txtRayVoidColor.IsInitialized Then txtRayVoidColor.Text = FormatColor(Main.RaytraceVoidColor)
+	If pnlRayVoidColorPreview.IsInitialized Then pnlRayVoidColorPreview.Color = Main.RaytraceVoidColor
+
+	If txtPathSamples.IsInitialized Then txtPathSamples.Text = Main.PathTraceSamples
+	If txtPathBounces.IsInitialized Then txtPathBounces.Text = Main.PathTraceBounces
+	If txtPathVoidColor.IsInitialized Then txtPathVoidColor.Text = FormatColor(Main.PathTraceVoidColor)
+	If pnlPathVoidColorPreview.IsInitialized Then pnlPathVoidColorPreview.Color = Main.PathTraceVoidColor
+
+	renderSettingsUpdating = False
+
+	UpdateSolidSettingsEnabled
+	UpdateRenderModePanels(mode)
+End Sub
+
+Private Sub UpdateRenderModePanels(mode As Int)
+	If spnRenderMode.IsInitialized = False Then Return
+	Dim top As Int = spnRenderMode.Top + spnRenderMode.Height + 12dip
+	If pnlRenderSolid.IsInitialized Then
+		pnlRenderSolid.Top = top
+		pnlRenderSolid.Visible = (mode = Main.Renderer.MODE_RASTER)
+	End If
+	If pnlRenderRay.IsInitialized Then
+		pnlRenderRay.Top = top
+		pnlRenderRay.Visible = (mode = Main.Renderer.MODE_RAYTRACE)
+	End If
+	If pnlRenderPath.IsInitialized Then
+		pnlRenderPath.Top = top
+		pnlRenderPath.Visible = (mode = Main.Renderer.MODE_PATHTRACE)
+	End If
+
+	Dim total As Int = top
+	If pnlRenderSolid.IsInitialized And pnlRenderSolid.Visible Then
+		total = top + pnlRenderSolid.Height
+	Else If pnlRenderRay.IsInitialized And pnlRenderRay.Visible Then
+		total = top + pnlRenderRay.Height
+	Else If pnlRenderPath.IsInitialized And pnlRenderPath.Visible Then
+		total = top + pnlRenderPath.Height
+	End If
+
+	If popoverRenderSettings.IsInitialized Then popoverRenderSettings.containerPanel.Panel.Height = total + 12dip
+End Sub
+
+Private Sub UpdateSolidSettingsEnabled
+	If chkSolidSmoothShading.IsInitialized = False Then Return
+	Dim allowExtras As Boolean = Not(chkSolidSmoothShading.Checked)
+	If chkSolidDrawFaces.IsInitialized Then chkSolidDrawFaces.Enabled = allowExtras
+	If chkSolidDrawEdges.IsInitialized Then chkSolidDrawEdges.Enabled = allowExtras
+	If chkSolidDrawVerts.IsInitialized Then chkSolidDrawVerts.Enabled = allowExtras
+	If sldSolidEdgeThickness.IsInitialized Then sldSolidEdgeThickness.panelmain.Enabled = allowExtras
+	If sldSolidVertexSize.IsInitialized Then sldSolidVertexSize.panelmain.Enabled = allowExtras
+	Dim allowFaceColor As Boolean = allowExtras And Not(chkSolidUseMaterialColors.Checked)
+	If txtSolidFaceColor.IsInitialized Then txtSolidFaceColor.Enabled = allowFaceColor
+	If pnlSolidFaceColorPreview.IsInitialized Then pnlSolidFaceColorPreview.Enabled = allowFaceColor
+	If txtSolidEdgeColor.IsInitialized Then txtSolidEdgeColor.Enabled = allowExtras
+	If pnlSolidEdgeColorPreview.IsInitialized Then pnlSolidEdgeColorPreview.Enabled = allowExtras
+	If txtSolidVertexColor.IsInitialized Then txtSolidVertexColor.Enabled = allowExtras
+	If pnlSolidVertexColorPreview.IsInitialized Then pnlSolidVertexColorPreview.Enabled = allowExtras
+End Sub
+
+Private Sub FormatColor(col As Int) As String
+	Dim hex As String = Bit.ToHexString(Bit.And(col, 0x00FFFFFF))
+	Do While hex.Length < 6
+		hex = "0" & hex
+	Loop
+	Return "#" & hex.ToUpperCase
+End Sub
+
+Private Sub ParseColorOrNull(value As String) As Object
+	Dim cleaned As String = value.Trim
+	If cleaned.Length = 0 Then Return Null
+	If cleaned.StartsWith("#") Then cleaned = cleaned.SubString(1)
+	If cleaned.Length <> 6 Then Return Null
+	Try
+		Dim r As Int = Bit.ParseInt(cleaned.SubString2(0, 2), 16)
+		Dim g As Int = Bit.ParseInt(cleaned.SubString2(2, 4), 16)
+		Dim b As Int = Bit.ParseInt(cleaned.SubString2(4, 6), 16)
+		Return Colors.ARGB(255, r, g, b)
+	Catch
+		Return Null
+	End Try
 End Sub
 
 public Sub build_PopoverObjectSettings
