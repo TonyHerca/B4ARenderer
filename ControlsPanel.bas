@@ -37,6 +37,7 @@ Sub Class_Globals
 	Dim edtAlbedo As EditVec3Field
 	Dim sldReflect As SliderView
 	Dim btnVisible As ToggleButton
+	Dim btnDeleteModel As Button
 	
 	'camera data
 	Dim sldCameraTurnSpeed As SliderView
@@ -641,6 +642,96 @@ public Sub refreshObjectPopover
 	container.RemoveAllViews
 	container.Height = 0
 
+	Dim padding As Int = 12dip
+	Dim buttonHeight As Int = 44dip
+	Dim labelHeight As Int = 24dip
+	Dim top As Int = padding
+	Dim fullWidth As Int = popoverObjectsList.containerPanel.Width - padding * 2
+
+	Dim lblAddPrimitive As Label
+	lblAddPrimitive.Initialize("")
+	lblAddPrimitive.Text = "Add Primitive"
+	lblAddPrimitive.TextColor = Colors.RGB(40, 40, 40)
+	lblAddPrimitive.TextSize = 16
+	lblAddPrimitive.Typeface = Typeface.DEFAULT_BOLD
+	lblAddPrimitive.Gravity = Gravity.CENTER_VERTICAL
+	container.AddView(lblAddPrimitive, padding, top, fullWidth, labelHeight)
+	top = UI.Bottom(lblAddPrimitive) + SmallSpaceing
+	container.Height = top
+
+	Dim primitiveButtons As List
+	primitiveButtons.Initialize2(Array As String("Cube", "Sphere", "Cylinder", "Cone", "Plane"))
+	For Each primitiveName As String In primitiveButtons
+		Dim btn As Button
+		btn.Initialize("btnAddObject")
+		btn.Text = $"Add ${primitiveName}"$
+		btn.TextSize = 14
+		btn.Typeface = Typeface.DEFAULT_BOLD
+		btn.TextColor = Colors.White
+		btn.Gravity = Gravity.CENTER
+		btn.Tag = CreateMap("mode": "primitive", "value": primitiveName)
+		btn.Background = UI.GetDrawable(Colors.RGB(55, 124, 253), buttonHeight)
+		container.AddView(btn, padding, top, fullWidth, buttonHeight)
+		top = top + buttonHeight + SmallSpaceing
+	Next
+
+	top = top + BigSpaceing
+	container.Height = top
+
+	Dim lblAddAsset As Label
+	lblAddAsset.Initialize("")
+	lblAddAsset.Text = "Add Model from Assets"
+	lblAddAsset.TextColor = Colors.RGB(40, 40, 40)
+	lblAddAsset.TextSize = 16
+	lblAddAsset.Typeface = Typeface.DEFAULT_BOLD
+	lblAddAsset.Gravity = Gravity.CENTER_VERTICAL
+	container.AddView(lblAddAsset, padding, top, fullWidth, labelHeight)
+	top = UI.Bottom(lblAddAsset) + SmallSpaceing
+	container.Height = top
+
+	Dim assetFiles As List = Callsub(Main, "ListAssetObjFiles")
+	If assetFiles.IsInitialized And assetFiles.Size > 0 Then
+		For Each fileName As String In assetFiles
+			Dim displayName As String = fileName
+			Dim dot As Int = displayName.LastIndexOf(".")
+			If dot > 0 Then displayName = displayName.SubString2(0, dot)
+			Dim btnAsset As Button
+			btnAsset.Initialize("btnAddObject")
+			btnAsset.Text = $"Add ${displayName}"$
+			btnAsset.TextSize = 14
+			btnAsset.Typeface = Typeface.DEFAULT_BOLD
+			btnAsset.TextColor = Colors.White
+			btnAsset.Gravity = Gravity.CENTER
+			btnAsset.Tag = CreateMap("mode": "asset", "value": fileName)
+			btnAsset.Background = UI.GetDrawable(Colors.RGB(45, 156, 86), buttonHeight)
+			container.AddView(btnAsset, padding, top, fullWidth, buttonHeight)
+			top = top + buttonHeight + SmallSpaceing
+		Next
+	Else
+		Dim lblNoAssets As Label
+		lblNoAssets.Initialize("")
+		lblNoAssets.Text = "No OBJ assets found"
+		lblNoAssets.TextColor = Colors.Gray
+		lblNoAssets.Gravity = Gravity.CENTER_VERTICAL
+		lblNoAssets.TextSize = 14
+		container.AddView(lblNoAssets, padding, top, fullWidth, labelHeight)
+		top = UI.Bottom(lblNoAssets) + SmallSpaceing
+	End If
+
+	top = top + BigSpaceing
+	container.Height = top
+
+	Dim lblSceneObjects As Label
+	lblSceneObjects.Initialize("")
+	lblSceneObjects.Text = "Scene Objects"
+	lblSceneObjects.TextColor = Colors.RGB(40, 40, 40)
+	lblSceneObjects.TextSize = 16
+	lblSceneObjects.Typeface = Typeface.DEFAULT_BOLD
+	lblSceneObjects.Gravity = Gravity.CENTER_VERTICAL
+	container.AddView(lblSceneObjects, padding, top, fullWidth, labelHeight)
+	top = UI.Bottom(lblSceneObjects) + SmallSpaceing
+	container.Height = top
+
 	Dim cameraBar As ModelBar = AddModelBarToPopover(popoverObjectsList, "objectsList")
 	cameraBar.Title = "Camera"
 	cameraBar.TypeIcon = "📷"
@@ -661,11 +752,13 @@ public Sub refreshObjectPopover
 
 	For Each obj As cModel In Main.Scene.Models
 		Dim model As ModelBar = AddModelBarToPopover(popoverObjectsList, "objectsList")
-		model.Title = obj.mesh.Name
+		model.Title = obj.Name
 		model.TypeIcon = "🧊"
 		model.Tag = CreateMap("type": "model", "ref": obj)
 		model.SetShownWithoutEvent(obj.Visible)
 	Next
+
+	If container.Height < top Then container.Height = top
 End Sub
 
 public Sub objectsList_VisibilityChanged(visible As Boolean)
@@ -715,6 +808,43 @@ public Sub objectsList_SettingsClick
 	Else If tagData Is cModel Then
 		ApplyObjectDataToPopover(tagData)
 		popoverObjectSettings.ShowPanel
+	End If
+End Sub
+
+Sub btnAddObject_Click
+	Dim btn As Button = Sender
+	Dim tagData As Object = btn.Tag
+	If tagData Is Map Then
+		Dim data As Map = tagData
+		Dim mode As String = data.Get("mode")
+		Select mode
+			Case "primitive"
+				Dim primitive As String = data.Get("value")
+				Dim newModel As cModel = CallSub2(Main, "AddPrimitiveObject", primitive)
+				refreshObjectPopover
+				If newModel <> Null Then
+					ApplyObjectDataToPopover(newModel)
+					popoverObjectSettings.ShowPanel
+				End If
+			Case "asset"
+				Dim fileName As String = data.Get("value")
+				Dim newAssetModel As cModel = CallSub2(Main, "AddAssetModel", fileName)
+				refreshObjectPopover
+				If newAssetModel <> Null Then
+					ApplyObjectDataToPopover(newAssetModel)
+					popoverObjectSettings.ShowPanel
+				End If
+		End Select
+	End If
+End Sub
+
+Sub btnDeleteModel_Click
+	Dim modelData As Object = btnDeleteModel.Tag
+	If Not(modelData Is cModel) Then Return
+	Dim mdl As cModel = modelData
+	If CallSub2(Main, "RemoveModelFromScene", mdl) Then
+		refreshObjectPopover
+		popoverObjectSettings.HidePanel
 	End If
 End Sub
 
@@ -1340,9 +1470,22 @@ public Sub build_PopoverObjectSettings
 	sldReflect.Title = "Reflectiveness"
 	
 	btnVisible.Initialize("btnVis")
+	btnVisible.textOn = "Visible"
+	btnVisible.textOff = "Visible"
+	btnVisible.TextSize = 16
+	btnVisible.Gravity = Gravity.CENTER
 	popoverObjectSettings.containerPanel.Panel.AddView(btnVisible, 0, UI.Bottom(sldReflect.panelmain), popoverObjectSettings.containerPanel.Width, 40dip)
-	
-	popoverObjectSettings.containerPanel.Panel.Height = UI.Bottom(btnVisible)
+
+	btnDeleteModel.Initialize("btnDeleteModel")
+	btnDeleteModel.Text = "Delete Object"
+	btnDeleteModel.TextSize = 16
+	btnDeleteModel.TextColor = Colors.White
+	btnDeleteModel.Typeface = Typeface.DEFAULT_BOLD
+	btnDeleteModel.Background = UI.GetDrawable(Colors.RGB(200, 50, 50), 44dip)
+	btnDeleteModel.Gravity = Gravity.CENTER
+	popoverObjectSettings.containerPanel.Panel.AddView(btnDeleteModel, 0, UI.Bottom(btnVisible) + SmallSpaceing, popoverObjectSettings.containerPanel.Width, 44dip)
+
+	popoverObjectSettings.containerPanel.Panel.Height = UI.Bottom(btnDeleteModel)
 End Sub
 
 Public Sub ApplyObjectDataToPopover(model As cModel)
@@ -1361,6 +1504,7 @@ Public Sub ApplyObjectDataToPopover(model As cModel)
 	edtAlbedo.Tag = model
 	sldReflect.Tag = model
 	btnVisible.Tag = model
+	btnDeleteModel.Tag = model
 End Sub
 
 public Sub edtPos(value As Vec3)

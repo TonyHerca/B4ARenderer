@@ -337,10 +337,144 @@ Private Sub GenerateUniquePresetName(base As String) As String
 	Dim suffix As Int = 1
 	Do While suffix > 0
 		Dim candidate As String = $"${cleanBase}-${suffix}"$
-		If existingLower.IndexOf(candidate.ToLowerCase) = -1 Then 
+		If existingLower.IndexOf(candidate.ToLowerCase) = -1 Then
 			Return candidate
 		End If
 		suffix = suffix + 1
 	Loop
 	Return ""
+End Sub
+Public Sub ListAssetObjFiles As List
+	Dim result As List
+	result.Initialize
+	Dim files As List = File.ListFiles(File.DirAssets)
+	If files.IsInitialized Then
+		For Each fileName As String In files
+			If fileName <> Null Then
+				Dim lower As String = fileName.ToLowerCase
+				If lower.EndsWith(".obj") Then
+					result.Add(fileName)
+				End If
+			End If
+		Next
+	End If
+	Return result
+End Sub
+
+Public Sub AddPrimitiveObject(kind As String) As cModel
+	If kind = Null Then Return Null
+	Dim clean As String = kind.Trim
+	If clean.Length = 0 Then Return Null
+
+	Dim primitiveType As String = clean.ToLowerCase
+	Select primitiveType
+		Case "cube", "sphere", "cylinder", "cone", "plane"
+			' supported
+		Case Else
+			Return Null
+	End Select
+
+	Dim modelName As String = GenerateUniqueModelName(clean)
+	Dim materialName As String = GenerateUniqueMaterialName(modelName & "_Mat")
+	Dim color As Int = Colors.ARGB(255, Rnd(80, 220), Rnd(80, 220), Rnd(80, 220))
+	Dim mat As cMaterial = Scene.CreateMaterial(materialName, color, 0)
+
+	Dim mesh As cMesh = Scene.CreateMesh(modelName & "_Mesh")
+	Select primitiveType
+		Case "cube"
+			mesh.BuildCube(1, mat.id)
+		Case "sphere"
+			mesh.BuildUVSphere(0.5, 24, 12, mat.id)
+		Case "cylinder"
+			mesh.BuildCylinder(0.4, 1.2, 24, True, True, mat.id)
+		Case "cone"
+			mesh.BuildCone(0.45, 1.2, 24, True, mat.id)
+		Case "plane"
+			mesh.BuildPlaneXZ(2, 2, 0, 1, 1, mat.id)
+	End Select
+
+	Dim mdl As cModel = Scene.CreateModel(modelName, mesh, mat)
+	mdl.SetTRS(Math3D.V3(0, -mesh.MinY, 0), Math3D.V3(0, 0, 0), 1)
+	Scene.AddModel(mdl)
+	resetTimer
+	Return mdl
+End Sub
+
+Public Sub AddAssetModel(fileName As String) As cModel
+	If fileName = Null Then Return Null
+	Dim clean As String = fileName.Trim
+	If clean.Length = 0 Then Return Null
+	If File.Exists(File.DirAssets, clean) = False Then
+		Log($"OBJ asset not found: ${clean}"$)
+		Return Null
+	End If
+
+	Dim base As String = clean
+	Dim dot As Int = base.LastIndexOf(".")
+	If dot > 0 Then base = base.SubString2(0, dot)
+
+	Dim modelName As String = GenerateUniqueModelName(base)
+	Dim materialName As String = GenerateUniqueMaterialName(modelName & "_Mat")
+	Dim mat As cMaterial = Scene.CreateMaterial(materialName, Colors.RGB(220, 220, 220), 0)
+
+	Dim mesh As cMesh = Scene.CreateMesh(modelName & "_Mesh")
+	mesh.LoadOBJFromAssets(clean, mat.id)
+
+	Dim mdl As cModel = Scene.CreateModel(modelName, mesh, mat)
+	mdl.SetTRS(Math3D.V3(0, -mesh.MinY, 0), Math3D.V3(0, 0, 0), 1)
+	Scene.AddModel(mdl)
+	resetTimer
+	Return mdl
+End Sub
+
+Public Sub RemoveModelFromScene(model As cModel) As Boolean
+	If Not(model Is cModel) Then
+		Return False
+	End If
+	If Scene.Models.IndexOf(model) = -1 Then Return False
+	Scene.RemoveModel(model)
+	resetTimer
+	Return True
+End Sub
+
+Private Sub GenerateUniqueModelName(base As String) As String
+	Dim existing As List
+	existing.Initialize
+	For Each mdl As cModel In Scene.Models
+		existing.Add(mdl.Name)
+	Next
+	Return GenerateUniqueNameFromList(base, existing, "Object")
+End Sub
+
+Private Sub GenerateUniqueMaterialName(base As String) As String
+	Dim existing As List
+	existing.Initialize
+	For Each mat As cMaterial In Scene.Materials
+		existing.Add(mat.Name)
+	Next
+	Return GenerateUniqueNameFromList(base, existing, "Material")
+End Sub
+
+Private Sub GenerateUniqueNameFromList(base As String, existing As List, fallback As String) As String
+	Dim cleanBase As String = base.Trim
+	If cleanBase.Length = 0 Then cleanBase = fallback
+
+	Dim existingLower As List
+	existingLower.Initialize
+	If existing.IsInitialized Then
+		For Each entry As String In existing
+			If entry <> Null Then existingLower.Add(entry.ToLowerCase)
+		Next
+	End If
+
+	If existingLower.IndexOf(cleanBase.ToLowerCase) = -1 Then Return cleanBase
+
+	Dim suffix As Int = 1
+	Do While suffix < 10000
+		Dim candidate As String = $"${cleanBase}-${suffix}"$
+		If existingLower.IndexOf(candidate.ToLowerCase) = -1 Then Return candidate
+		suffix = suffix + 1
+	Loop
+
+	Return cleanBase & "-" & DateTime.Now
 End Sub
