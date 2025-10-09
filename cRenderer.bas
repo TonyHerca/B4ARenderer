@@ -7,8 +7,8 @@ Version=13.4
 #IgnoreWarnings: 11, 9
 
 Sub Class_Globals
-	Type RenderOptions(BackfaceCull As Boolean, DrawFaces As Boolean, DrawEdges As Boolean, DrawVerts As Boolean, SmoothShading As Boolean, UseMaterialColors As Boolean, FaceColor As Int, EdgeColor As Int, VertexColor As Int, EdgeThickness As Float, VertexSize As Float, VoidColor As Int)
-	Type WireframeOptions(BackfaceCull As Boolean, DrawFaces As Boolean, DrawEdges As Boolean, DrawVerts As Boolean, UseMaterialColors As Boolean, FaceColor As Int, EdgeColor As Int, VertexColor As Int, EdgeThickness As Float, VertexSize As Float, VoidColor As Int, ShowCamera As Boolean, ShowLights As Boolean, ShowModels As Boolean, ShowOriginAxes As Boolean)
+	Type RenderOptions(BackfaceCull As Boolean, DrawFaces As Boolean, DrawEdges As Boolean, DrawVerts As Boolean, SmoothShading As Boolean, UseMaterialColors As Boolean, FaceColor As Int, EdgeColor As Int, VertexColor As Int, EdgeThickness As Float, VertexSize As Float, VoidColor As Int, ShowCamera As Boolean, ShowLights As Boolean, ShowOriginAxes As Boolean, ShowWorldGrid As Boolean, ShowFaceNormals As Boolean, ShowVertexNormals As Boolean, ShowCornerNormals As Boolean)
+	Type WireframeOptions(BackfaceCull As Boolean, DrawFaces As Boolean, DrawEdges As Boolean, DrawVerts As Boolean, UseMaterialColors As Boolean, FaceColor As Int, EdgeColor As Int, VertexColor As Int, EdgeThickness As Float, VertexSize As Float, VoidColor As Int, ShowCamera As Boolean, ShowLights As Boolean, ShowModels As Boolean, ShowOriginAxes As Boolean, ShowWorldGrid As Boolean, ShowFaceNormals As Boolean, ShowVertexNormals As Boolean, ShowCornerNormals As Boolean)
 	Type ScreenPoint(Success As Boolean, X As Float, Y As Float, Depth As Double)
 	Type RenderStats(TotalFaces As Int, CulledFaces As Int, DrawnFaces As Int, BuildMs As Int, RenderMs As Int)
 	Type Ray(Origin As Vec3, Dir As Vec3)
@@ -171,7 +171,6 @@ Public Sub RenderRaster(cvs As Canvas, dstW As Int, dstH As Int, scene As cScene
 	Dim lightDir As Vec3 = Math3D.V3(-1, -1, -1)
 	
 	Dim Lm As Vec3 = Math3D.Normalize(Math3D.Mul(lightDir, -1))   ' surface->light
-
 	
 	' draw
 	Dim culled As Int, drawn As Int
@@ -396,50 +395,7 @@ Public Sub RenderWireframe(cvs As Canvas, dstW As Int, dstH As Int, scene As cSc
 
 	' overlays
 	Dim overlayStroke As Float = DipToCurrent(2)
-	If opt.ShowOriginAxes Then
-		Dim origin As Vec3 = Math3D.V3(0, 0, 0)
-		Dim axisScale As Double = 1
-		Dim sx As ScreenPoint = ProjectWorldPoint(origin, scene.Camera.Pos, right, upv, fwd, aspect, f, dstW, dstH)
-		If sx.Success Then
-			Dim axX As ScreenPoint = ProjectWorldPoint(Math3D.V3(axisScale, 0, 0), scene.Camera.Pos, right, upv, fwd, aspect, f, dstW, dstH)
-			Dim axY As ScreenPoint = ProjectWorldPoint(Math3D.V3(0, axisScale, 0), scene.Camera.Pos, right, upv, fwd, aspect, f, dstW, dstH)
-			Dim axZ As ScreenPoint = ProjectWorldPoint(Math3D.V3(0, 0, axisScale), scene.Camera.Pos, right, upv, fwd, aspect, f, dstW, dstH)
-			If axX.Success Then cvs.DrawLine(sx.X, sx.Y, axX.X, axX.Y, Colors.Red, overlayStroke)
-			If axY.Success Then cvs.DrawLine(sx.X, sx.Y, axY.X, axY.Y, Colors.Green, overlayStroke)
-			If axZ.Success Then cvs.DrawLine(sx.X, sx.Y, axZ.X, axZ.Y, Colors.Blue, overlayStroke)
-		End If
-	End If
-
-	If opt.ShowLights Then
-		Dim lightSize As Float = DipToCurrent(6)
-		For Each L As cLight In scene.Lights
-			If L.Enabled = False Then Continue
-			Dim base As Vec3
-			If L.Kind = L.KIND_DIRECTIONAL Then
-				Dim dir As Vec3 = Math3D.Normalize(Math3D.Mul(L.Direction, -1))
-				base = Math3D.AddV(scene.Camera.Pos, Math3D.Mul(dir, 5))
-			Else
-				base = L.Position
-			End If
-			Dim sp As ScreenPoint = ProjectWorldPoint(base, scene.Camera.Pos, right, upv, fwd, aspect, f, dstW, dstH)
-			If sp.Success Then
-				cvs.DrawCircle(sp.X, sp.Y, lightSize, L.Color, True, 0)
-				If L.Kind = L.KIND_DIRECTIONAL Then
-					Dim tip As Vec3 = Math3D.AddV(base, Math3D.Normalize(Math3D.Mul(L.Direction, -1)))
-					Dim spTip As ScreenPoint = ProjectWorldPoint(tip, scene.Camera.Pos, right, upv, fwd, aspect, f, dstW, dstH)
-					If spTip.Success Then cvs.DrawLine(sp.X, sp.Y, spTip.X, spTip.Y, L.Color, overlayStroke)
-				End If
-			End If
-		Next
-	End If
-
-	If opt.ShowCamera Then
-		Dim cx As Float = dstW / 2, cy As Float = dstH / 2
-		Dim half As Float = DipToCurrent(10)
-		Dim thin As Float = DipToCurrent(2)
-		cvs.DrawLine(cx - half, cy, cx + half, cy, Colors.White, thin)
-		cvs.DrawLine(cx, cy - half, cx, cy + half, Colors.White, thin)
-	End If
+	DrawSceneOverlays(cvs, scene, FR, opt.ShowCamera, opt.ShowLights, opt.ShowOriginAxes, opt.ShowWorldGrid, opt.ShowFaceNormals, opt.ShowVertexNormals, opt.ShowCornerNormals, overlayStroke, right, upv, fwd, aspect, f, dstW, dstH)
 
 	Dim t2 As Long = DateTime.Now
 	stats.BuildMs = t1 - t0
@@ -467,6 +423,285 @@ Private Sub ProjectWorldPoint(world As Vec3, camPos As Vec3, right As Vec3, upv 
 	res.Y = (-ndcY * 0.5 + 0.5) * dstH
 	res.Success = True
 	Return res
+End Sub
+
+Private Sub DrawSceneOverlays(cvs As Canvas, scene As cScene, fr As SceneFrame, showCamera As Boolean, showLights As Boolean, showOriginAxes As Boolean, showWorldGrid As Boolean, showFaceNormals As Boolean, showVertexNormals As Boolean, showCornerNormals As Boolean, overlayStroke As Float, right As Vec3, upv As Vec3, fwd As Vec3, aspect As Double, f As Double, dstW As Int, dstH As Int)
+	Dim camPos As Vec3 = scene.Camera.Pos
+	Dim extent As Double = ComputeSceneExtent(fr)
+	Dim axisScale As Double = Max(1, extent * 0.5)
+	Dim normalLen As Double = Max(0.05, extent * 0.1)
+
+	If showWorldGrid Then
+		DrawWorldGrid(cvs, camPos, right, upv, fwd, aspect, f, dstW, dstH, extent, overlayStroke)
+	End If
+
+	If showOriginAxes Then
+		Dim origin As Vec3 = Math3D.V3(0, 0, 0)
+		DrawSegment(cvs, origin, Math3D.AddV(origin, Math3D.Mul(Math3D.V3(1, 0, 0), axisScale)), Colors.Red, overlayStroke, camPos, right, upv, fwd, aspect, f, dstW, dstH)
+		DrawSegment(cvs, origin, Math3D.AddV(origin, Math3D.Mul(Math3D.V3(0, 1, 0), axisScale)), Colors.Green, overlayStroke, camPos, right, upv, fwd, aspect, f, dstW, dstH)
+		DrawSegment(cvs, origin, Math3D.AddV(origin, Math3D.Mul(Math3D.V3(0, 0, 1), axisScale)), Colors.Blue, overlayStroke, camPos, right, upv, fwd, aspect, f, dstW, dstH)
+	End If
+
+	If showLights Then
+		For Each L As cLight In scene.Lights
+			If L.Enabled = False Then Continue
+			DrawLightGizmo(cvs, L, camPos, right, upv, fwd, aspect, f, dstW, dstH, extent, overlayStroke)
+		Next
+	End If
+
+	If showFaceNormals Or showVertexNormals Or showCornerNormals Then
+		DrawSceneNormals(cvs, fr, showFaceNormals, showVertexNormals, showCornerNormals, normalLen, camPos, right, upv, fwd, aspect, f, dstW, dstH)
+	End If
+
+	If showCamera Then
+		Dim cx As Float = dstW / 2, cy As Float = dstH / 2
+		Dim half As Float = DipToCurrent(10)
+		Dim thin As Float = DipToCurrent(2)
+		cvs.DrawLine(cx - half, cy, cx + half, cy, Colors.White, thin)
+		cvs.DrawLine(cx, cy - half, cx, cy + half, Colors.White, thin)
+	End If
+End Sub
+
+Private Sub ComputeSceneExtent(fr As SceneFrame) As Double
+	If fr.IsInitialized = False Or fr.Verts.IsInitialized = False Or fr.Verts.Size = 0 Then Return 5
+	Dim minX As Double = 1e9, minY As Double = 1e9, minZ As Double = 1e9
+	Dim maxX As Double = -1e9, maxY As Double = -1e9, maxZ As Double = -1e9
+	Dim i As Int
+	For i = 0 To fr.Verts.Size - 1
+		Dim v As Vec3 = fr.Verts.Get(i)
+		If v.X < minX Then minX = v.X
+		If v.Y < minY Then minY = v.Y
+		If v.Z < minZ Then minZ = v.Z
+		If v.X > maxX Then maxX = v.X
+		If v.Y > maxY Then maxY = v.Y
+		If v.Z > maxZ Then maxZ = v.Z
+	Next
+	Dim dx As Double = maxX - minX
+	Dim dy As Double = maxY - minY
+	Dim dz As Double = maxZ - minZ
+	Dim diag As Double = Sqrt(Max(1e-6, dx*dx + dy*dy + dz*dz))
+	Return Max(1, diag)
+End Sub
+
+Private Sub DrawWorldGrid(cvs As Canvas, camPos As Vec3, right As Vec3, upv As Vec3, fwd As Vec3, aspect As Double, f As Double, dstW As Int, dstH As Int, extent As Double, overlayStroke As Float)
+	Dim spacing As Double = ComputeGridSpacing(extent)
+	Dim maxSteps As Int = Min(40, Ceil(extent / spacing) + 5)
+	If maxSteps < 1 Then maxSteps = 1
+	Dim range As Double = spacing * maxSteps
+	Dim thin As Float = Max(1dip, overlayStroke * 0.6)
+	Dim minorColor As Int = Colors.ARGB(120, 200, 200, 200)
+	Dim majorColor As Int = Colors.ARGB(180, 170, 170, 170)
+	Dim i As Int
+	For i = -maxSteps To maxSteps
+		Dim color As Int = minorColor
+		If i = 0 Then color = majorColor
+		Dim x As Double = i * spacing
+		Dim startX As Vec3 = Math3D.V3(x, 0, -range)
+		Dim endX As Vec3 = Math3D.V3(x, 0, range)
+		DrawSegment(cvs, startX, endX, color, thin, camPos, right, upv, fwd, aspect, f, dstW, dstH)
+		Dim z As Double = i * spacing
+		Dim startZ As Vec3 = Math3D.V3(-range, 0, z)
+		Dim endZ As Vec3 = Math3D.V3(range, 0, z)
+		DrawSegment(cvs, startZ, endZ, color, thin, camPos, right, upv, fwd, aspect, f, dstW, dstH)
+	Next
+End Sub
+
+Private Sub ComputeBasis(forward As Vec3) As List
+	Dim dir As Vec3 = Math3D.Normalize(forward)
+	Dim ref As Vec3
+	If Abs(dir.Y) < 0.99 Then
+		ref = Math3D.V3(0, 1, 0)
+	Else
+		ref = Math3D.V3(1, 0, 0)
+	End If
+	Dim u As Vec3 = Math3D.Normalize(Math3D.Cross(dir, ref))
+	Dim v As Vec3 = Math3D.Normalize(Math3D.Cross(u, dir))
+	Dim basis As List
+	basis.Initialize
+	basis.Add(u)
+	basis.Add(v)
+	Return basis
+End Sub
+
+Private Sub DrawLightGizmo(cvs As Canvas, L As cLight, camPos As Vec3, right As Vec3, upv As Vec3, fwd As Vec3, aspect As Double, f As Double, dstW As Int, dstH As Int, extent As Double, overlayStroke As Float)
+	Dim color As Int = L.Color
+	Dim thin As Float = Max(1dip, overlayStroke * 0.8)
+	Dim base As Vec3
+	Dim dir As Vec3 = Math3D.V3(0, -1, 0)
+	If L.Kind = L.KIND_DIRECTIONAL Then
+		dir = Math3D.Normalize(Math3D.Mul(L.Direction, -1))
+		base = Math3D.V3(0, 0, 0)
+		Dim length As Double = Max(1, extent)
+		Dim tip As Vec3 = Math3D.AddV(base, Math3D.Mul(dir, length))
+		DrawSegment(cvs, base, tip, color, overlayStroke, camPos, right, upv, fwd, aspect, f, dstW, dstH)
+		Dim basis As List = ComputeBasis(dir)
+		If basis.Size >= 2 Then
+			Dim side As Vec3 = basis.Get(0)
+			Dim upg As Vec3 = basis.Get(1)
+			Dim arrowLen As Double = length * 0.1
+			Dim arrow1 As Vec3 = Math3D.AddV(tip, Math3D.Mul(Math3D.AddV(side, Math3D.Mul(upg, 0.5)), -arrowLen))
+			Dim arrow2 As Vec3 = Math3D.AddV(tip, Math3D.Mul(Math3D.SubV(side, Math3D.Mul(upg, 0.5)), -arrowLen))
+			DrawSegment(cvs, tip, arrow1, color, overlayStroke, camPos, right, upv, fwd, aspect, f, dstW, dstH)
+			DrawSegment(cvs, tip, arrow2, color, overlayStroke, camPos, right, upv, fwd, aspect, f, dstW, dstH)
+		End If
+		Return
+	End If
+
+	base = L.Position
+	If L.Kind = L.KIND_POINT Then
+		Dim center As ScreenPoint = ProjectWorldPoint(base, camPos, right, upv, fwd, aspect, f, dstW, dstH)
+		If center.Success Then
+			Dim radius1 As Float = DipToCurrent(4 + Min(6, L.Intensity * 2))
+			cvs.DrawCircle(center.X, center.Y, DipToCurrent(2), color, True, 0)
+			cvs.DrawCircle(center.X, center.Y, radius1, color, False, thin)
+		End If
+		Return
+	Else If L.Kind = L.KIND_RECT Then
+		Dim u As Vec3 = L.U
+		Dim v As Vec3 = L.V
+		If Math3D.Len(u) <= 1e-6 Or Math3D.Len(v) <= 1e-6 Then Return
+		Dim corners As List
+		corners.Initialize
+		corners.Add(Math3D.AddV(base, Math3D.AddV(u, v)))
+		corners.Add(Math3D.AddV(base, Math3D.SubV(u, v)))
+		corners.Add(Math3D.SubV(base, Math3D.AddV(u, v)))
+		corners.Add(Math3D.SubV(base, Math3D.SubV(u, v)))
+		Dim prev As ScreenPoint
+		Dim first As ScreenPoint
+		Dim idx As Int
+		For idx = 0 To corners.Size - 1
+			Dim p As Vec3 = corners.Get(idx)
+			Dim sp As ScreenPoint = ProjectWorldPoint(p, camPos, right, upv, fwd, aspect, f, dstW, dstH)
+			If sp.Success = False Then Return
+			If idx = 0 Then
+				first = sp
+			Else
+				cvs.DrawLine(prev.X, prev.Y, sp.X, sp.Y, color, thin)
+			End If
+			prev = sp
+		Next
+		cvs.DrawLine(prev.X, prev.Y, first.X, first.Y, color, thin)
+		Return
+	Else If L.Kind = L.KIND_SPOT Then
+		dir = Math3D.Normalize(Math3D.Mul(L.Direction, -1))
+		Dim coneLength As Double = Max(1, extent * 0.5)
+		Dim angle As Double = ACos(Max(-1, Min(1, L.CosOuter)))
+		Dim radius As Double = coneLength * Tan(angle)
+		Dim tip As Vec3 = Math3D.AddV(base, Math3D.Mul(dir, coneLength))
+		Dim basis As List = ComputeBasis(dir)
+		If basis.Size < 2 Then Return
+		Dim side As Vec3 = basis.Get(0)
+		Dim upg As Vec3 = basis.Get(1)
+		Dim segments As Int = 16
+		Dim prevPoint As ScreenPoint
+		Dim firstPoint As ScreenPoint
+		Dim s As Int
+		For s = 0 To segments
+			Dim ang As Double = (s / segments) * 2 * cPI
+			Dim circlePoint As Vec3 = Math3D.AddV(tip, Math3D.AddV(Math3D.Mul(side, Cos(ang) * radius), Math3D.Mul(upg, Sin(ang) * radius)))
+			Dim sp As ScreenPoint = ProjectWorldPoint(circlePoint, camPos, right, upv, fwd, aspect, f, dstW, dstH)
+			If sp.Success = False Then Return
+			If s = 0 Then
+				firstPoint = sp
+			Else
+				cvs.DrawLine(prevPoint.X, prevPoint.Y, sp.X, sp.Y, color, thin)
+			End If
+			prevPoint = sp
+		Next
+		cvs.DrawLine(prevPoint.X, prevPoint.Y, firstPoint.X, firstPoint.Y, color, thin)
+		Dim spokes As Int = 4
+		For s = 0 To spokes - 1
+			Dim ang As Double = (s / spokes) * 2 * cPI
+			Dim circlePoint As Vec3 = Math3D.AddV(tip, Math3D.AddV(Math3D.Mul(side, Cos(ang) * radius), Math3D.Mul(upg, Sin(ang) * radius)))
+			DrawSegment(cvs, base, circlePoint, color, thin, camPos, right, upv, fwd, aspect, f, dstW, dstH)
+		Next
+		Dim baseCircle As ScreenPoint = ProjectWorldPoint(base, camPos, right, upv, fwd, aspect, f, dstW, dstH)
+		If baseCircle.Success Then
+			cvs.DrawCircle(baseCircle.X, baseCircle.Y, DipToCurrent(2), color, True, 0)
+			cvs.DrawCircle(baseCircle.X, baseCircle.Y, DipToCurrent(6), color, False, thin)
+		End If
+		Return
+	End If
+
+	' fallback for other light kinds
+	Dim center As ScreenPoint = ProjectWorldPoint(base, camPos, right, upv, fwd, aspect, f, dstW, dstH)
+	If center.Success Then
+		cvs.DrawCircle(center.X, center.Y, DipToCurrent(4), color, True, 0)
+	End If
+End Sub
+
+Private Sub DrawSceneNormals(cvs As Canvas, fr As SceneFrame, showFace As Boolean, showVert As Boolean, showCorner As Boolean, normalLen As Double, camPos As Vec3, right As Vec3, upv As Vec3, fwd As Vec3, aspect As Double, f As Double, dstW As Int, dstH As Int)
+	Dim thin As Float = Max(1dip, DipToCurrent(1.2))
+	If showFace And fr.FaceN.IsInitialized Then
+		Dim fi As Int
+		For fi = 0 To fr.Faces.Size - 1
+			Dim face As Face = fr.Faces.Get(fi)
+			Dim a As Vec3 = fr.Verts.Get(face.A)
+			Dim b As Vec3 = fr.Verts.Get(face.B)
+			Dim c As Vec3 = fr.Verts.Get(face.C)
+			Dim center As Vec3 = Math3D.V3((a.X + b.X + c.X) / 3, (a.Y + b.Y + c.Y) / 3, (a.Z + b.Z + c.Z) / 3)
+			Dim dir As Vec3 = fr.FaceN.Get(fi)
+			Dim dirLen As Double = Math3D.Len(dir)
+			If dirLen <= 1e-6 Then Continue
+			Dim tip As Vec3 = Math3D.AddV(center, Math3D.Mul(Math3D.Mul(dir, 1 / dirLen), normalLen))
+			DrawSegment(cvs, center, tip, Colors.ARGB(220, 255, 230, 128), thin, camPos, right, upv, fwd, aspect, f, dstW, dstH)
+		Next
+	End If
+
+	If showVert And fr.VertsN.IsInitialized And fr.VertsN.Size = fr.Verts.Size Then
+		Dim vi As Int
+		For vi = 0 To fr.Verts.Size - 1
+			Dim pos As Vec3 = fr.Verts.Get(vi)
+			Dim dir As Vec3 = fr.VertsN.Get(vi)
+			Dim dirLen As Double = Math3D.Len(dir)
+			If dirLen <= 1e-6 Then Continue
+			Dim tip As Vec3 = Math3D.AddV(pos, Math3D.Mul(Math3D.Mul(dir, 1 / dirLen), normalLen))
+			DrawSegment(cvs, pos, tip, Colors.ARGB(220, 128, 200, 255), thin, camPos, right, upv, fwd, aspect, f, dstW, dstH)
+		Next
+	End If
+
+	If showCorner And fr.CornerN.IsInitialized And fr.CornerN.Size >= fr.Faces.Size * 3 Then
+		Dim fi As Int
+		For fi = 0 To fr.Faces.Size - 1
+			Dim face As Face = fr.Faces.Get(fi)
+			Dim baseIdx As Int = fi * 3
+			Dim cornerIdx(3) As Int
+			cornerIdx(0) = face.A
+			cornerIdx(1) = face.B
+			cornerIdx(2) = face.C
+			Dim ci As Int
+			For ci = 0 To 2
+				Dim pos As Vec3 = fr.Verts.Get(cornerIdx(ci))
+				Dim dir As Vec3 = fr.CornerN.Get(baseIdx + ci)
+				Dim dirLen As Double = Math3D.Len(dir)
+				If dirLen <= 1e-6 Then Continue
+				Dim tip As Vec3 = Math3D.AddV(pos, Math3D.Mul(Math3D.Mul(dir, 1 / dirLen), normalLen * 0.75))
+				DrawSegment(cvs, pos, tip, Colors.ARGB(220, 180, 255, 180), thin, camPos, right, upv, fwd, aspect, f, dstW, dstH)
+			Next
+		Next
+	End If
+	
+End Sub
+
+Private Sub DrawSegment(cvs As Canvas, a As Vec3, b As Vec3, color As Int, thickness As Float, camPos As Vec3, right As Vec3, upv As Vec3, fwd As Vec3, aspect As Double, f As Double, dstW As Int, dstH As Int)
+	Dim pa As ScreenPoint = ProjectWorldPoint(a, camPos, right, upv, fwd, aspect, f, dstW, dstH)
+	If pa.Success = False Then Return
+	Dim pb As ScreenPoint = ProjectWorldPoint(b, camPos, right, upv, fwd, aspect, f, dstW, dstH)
+	If pb.Success = False Then Return
+	cvs.DrawLine(pa.X, pa.Y, pb.X, pb.Y, color, thickness)
+End Sub
+
+Private Sub ComputeGridSpacing(extent As Double) As Double
+	Dim e As Double = Max(1, extent)
+	If e <= 1 Then Return 0.1
+	If e <= 2 Then Return 0.2
+	If e <= 5 Then Return 0.5
+	If e <= 10 Then Return 1
+	If e <= 20 Then Return 2
+	If e <= 50 Then Return 5
+	If e <= 100 Then Return 10
+	If e <= 200 Then Return 20
+	Return 50
 End Sub
 ' --- RAY TRACE hook ---
 Public Sub RenderRaytrace(scene As cScene, Width As Int, Height As Int) As ResumableSub	

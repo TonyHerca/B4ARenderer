@@ -101,6 +101,13 @@ Sub Activity_Create(FirstTime As Boolean)
 	Opt.EdgeThickness = 2
 	Opt.VertexSize = 3
 	Opt.VoidColor = Colors.Black
+	Opt.ShowCamera = False
+	Opt.ShowLights = True
+	Opt.ShowOriginAxes = True
+	Opt.ShowWorldGrid = True
+	Opt.ShowFaceNormals = False
+	Opt.ShowVertexNormals = False
+	Opt.ShowCornerNormals = False
 	
 	WireOpt.BackfaceCull = True
 	WireOpt.DrawFaces = True
@@ -117,6 +124,10 @@ Sub Activity_Create(FirstTime As Boolean)
 	WireOpt.ShowLights = True
 	WireOpt.ShowModels = True
 	WireOpt.ShowOriginAxes = True
+	WireOpt.ShowWorldGrid = True
+	WireOpt.ShowFaceNormals = False
+	WireOpt.ShowVertexNormals = False
+	WireOpt.ShowCornerNormals = False
 	Controls.build
 	
 '	========= SCENE ==========

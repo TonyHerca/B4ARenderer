@@ -61,6 +61,13 @@ Sub Class_Globals
 	Dim chkSolidDrawEdges As CheckBox
 	Dim chkSolidDrawVerts As CheckBox
 	Dim chkSolidUseMaterialColors As CheckBox
+	Dim chkSolidShowLights As CheckBox
+	Dim chkSolidShowOriginAxes As CheckBox
+	Dim chkSolidShowWorldGrid As CheckBox
+	Dim chkSolidShowCamera As CheckBox
+	Dim chkSolidShowFaceNormals As CheckBox
+	Dim chkSolidShowVertexNormals As CheckBox
+	Dim chkSolidShowCornerNormals As CheckBox
 	Dim txtSolidFaceColor As EditText
 	Dim txtSolidEdgeColor As EditText
 	Dim txtSolidVertexColor As EditText
@@ -80,6 +87,10 @@ Sub Class_Globals
 	Dim chkWireShowLights As CheckBox
 	Dim chkWireShowModels As CheckBox
 	Dim chkWireShowAxes As CheckBox
+	Dim chkWireShowWorldGrid As CheckBox
+	Dim chkWireShowFaceNormals As CheckBox
+	Dim chkWireShowVertexNormals As CheckBox
+	Dim chkWireShowCornerNormals As CheckBox
 	Dim txtWireFaceColor As EditText
 	Dim txtWireEdgeColor As EditText
 	Dim txtWireVertexColor As EditText
@@ -311,6 +322,49 @@ Sub chkSolidDrawVerts_CheckedChange(Checked As Boolean)
 	CallSub(Main, "resetTimer")
 End Sub
 
+
+Sub chkSolidShowLights_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.Opt.ShowLights = Checked
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub chkSolidShowOriginAxes_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.Opt.ShowOriginAxes = Checked
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub chkSolidShowWorldGrid_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.Opt.ShowWorldGrid = Checked
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub chkSolidShowCamera_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.Opt.ShowCamera = Checked
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub chkSolidShowFaceNormals_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.Opt.ShowFaceNormals = Checked
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub chkSolidShowVertexNormals_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.Opt.ShowVertexNormals = Checked
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub chkSolidShowCornerNormals_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.Opt.ShowCornerNormals = Checked
+	CallSub(Main, "resetTimer")
+End Sub
+
 Sub txtSolidFaceColor_TextChanged (Old As String, New As String)
 	If renderSettingsUpdating Then Return
 	Dim parsed As Object = ParseColorOrNull(New)
@@ -421,6 +475,31 @@ End Sub
 Sub chkWireShowAxes_CheckedChange(Checked As Boolean)
 	If renderSettingsUpdating Then Return
 	Main.WireOpt.ShowOriginAxes = Checked
+	CallSub(Main, "resetTimer")
+End Sub
+
+
+Sub chkWireShowWorldGrid_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.WireOpt.ShowWorldGrid = Checked
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub chkWireShowFaceNormals_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.WireOpt.ShowFaceNormals = Checked
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub chkWireShowVertexNormals_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.WireOpt.ShowVertexNormals = Checked
+	CallSub(Main, "resetTimer")
+End Sub
+
+Sub chkWireShowCornerNormals_CheckedChange(Checked As Boolean)
+	If renderSettingsUpdating Then Return
+	Main.WireOpt.ShowCornerNormals = Checked
 	CallSub(Main, "resetTimer")
 End Sub
 
@@ -689,7 +768,7 @@ public Sub refreshObjectPopover
 	top = UI.Bottom(lblAddAsset) + SmallSpaceing
 	container.Height = top
 
-	Dim assetFiles As List = Callsub(Main, "ListAssetObjFiles")
+	Dim assetFiles As List = CallSub(Main, "ListAssetObjFiles")
 	If assetFiles.IsInitialized And assetFiles.Size > 0 Then
 		For Each fileName As String In assetFiles
 			Dim displayName As String = fileName
@@ -920,6 +999,48 @@ Private Sub BuildSolidRenderSettings(parent As Panel, padding As Int)
 	parent.AddView(chkSolidDrawVerts, padding, top, parent.Width - padding * 2, 36dip)
 	top = top + 36dip + BigSpaceing
 
+	chkSolidShowLights.Initialize("chkSolidShowLights")
+	chkSolidShowLights.Text = "Show Light Gizmos"
+	chkSolidShowLights.TextSize = 16
+	parent.AddView(chkSolidShowLights, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	chkSolidShowOriginAxes.Initialize("chkSolidShowOriginAxes")
+	chkSolidShowOriginAxes.Text = "Show Origin Axes"
+	chkSolidShowOriginAxes.TextSize = 16
+	parent.AddView(chkSolidShowOriginAxes, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	chkSolidShowWorldGrid.Initialize("chkSolidShowWorldGrid")
+	chkSolidShowWorldGrid.Text = "Show World Grid"
+	chkSolidShowWorldGrid.TextSize = 16
+	parent.AddView(chkSolidShowWorldGrid, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	chkSolidShowCamera.Initialize("chkSolidShowCamera")
+	chkSolidShowCamera.Text = "Show Camera Overlay"
+	chkSolidShowCamera.TextSize = 16
+	parent.AddView(chkSolidShowCamera, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	chkSolidShowFaceNormals.Initialize("chkSolidShowFaceNormals")
+	chkSolidShowFaceNormals.Text = "Show Face Normals"
+	chkSolidShowFaceNormals.TextSize = 16
+	parent.AddView(chkSolidShowFaceNormals, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	chkSolidShowVertexNormals.Initialize("chkSolidShowVertexNormals")
+	chkSolidShowVertexNormals.Text = "Show Vertex Normals"
+	chkSolidShowVertexNormals.TextSize = 16
+	parent.AddView(chkSolidShowVertexNormals, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	chkSolidShowCornerNormals.Initialize("chkSolidShowCornerNormals")
+	chkSolidShowCornerNormals.Text = "Show Corner/Edge Normals"
+	chkSolidShowCornerNormals.TextSize = 16
+	parent.AddView(chkSolidShowCornerNormals, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + BigSpaceing
+
 	Dim lblFace As Label
 	lblFace.Initialize("")
 	lblFace.Text = "Face Color (#RRGGBB)"
@@ -1058,6 +1179,30 @@ Private Sub BuildWireRenderSettings(parent As Panel, padding As Int)
 	chkWireShowAxes.Text = "Show Origin Axes"
 	chkWireShowAxes.TextSize = 16
 	parent.AddView(chkWireShowAxes, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	chkWireShowWorldGrid.Initialize("chkWireShowWorldGrid")
+	chkWireShowWorldGrid.Text = "Show World Grid"
+	chkWireShowWorldGrid.TextSize = 16
+	parent.AddView(chkWireShowWorldGrid, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	chkWireShowFaceNormals.Initialize("chkWireShowFaceNormals")
+	chkWireShowFaceNormals.Text = "Show Face Normals"
+	chkWireShowFaceNormals.TextSize = 16
+	parent.AddView(chkWireShowFaceNormals, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	chkWireShowVertexNormals.Initialize("chkWireShowVertexNormals")
+	chkWireShowVertexNormals.Text = "Show Vertex Normals"
+	chkWireShowVertexNormals.TextSize = 16
+	parent.AddView(chkWireShowVertexNormals, padding, top, parent.Width - padding * 2, 36dip)
+	top = top + 36dip + SmallSpaceing
+
+	chkWireShowCornerNormals.Initialize("chkWireShowCornerNormals")
+	chkWireShowCornerNormals.Text = "Show Corner/Edge Normals"
+	chkWireShowCornerNormals.TextSize = 16
+	parent.AddView(chkWireShowCornerNormals, padding, top, parent.Width - padding * 2, 36dip)
 	top = top + 36dip + BigSpaceing
 
 	Dim lblWireFace As Label
@@ -1287,6 +1432,13 @@ Private Sub UpdateRenderSettingsUI
 	If chkSolidDrawFaces.IsInitialized Then chkSolidDrawFaces.Checked = Main.Opt.DrawFaces
 	If chkSolidDrawEdges.IsInitialized Then chkSolidDrawEdges.Checked = Main.Opt.DrawEdges
 	If chkSolidDrawVerts.IsInitialized Then chkSolidDrawVerts.Checked = Main.Opt.DrawVerts
+	If chkSolidShowLights.IsInitialized Then chkSolidShowLights.Checked = Main.Opt.ShowLights
+	If chkSolidShowOriginAxes.IsInitialized Then chkSolidShowOriginAxes.Checked = Main.Opt.ShowOriginAxes
+	If chkSolidShowWorldGrid.IsInitialized Then chkSolidShowWorldGrid.Checked = Main.Opt.ShowWorldGrid
+	If chkSolidShowCamera.IsInitialized Then chkSolidShowCamera.Checked = Main.Opt.ShowCamera
+	If chkSolidShowFaceNormals.IsInitialized Then chkSolidShowFaceNormals.Checked = Main.Opt.ShowFaceNormals
+	If chkSolidShowVertexNormals.IsInitialized Then chkSolidShowVertexNormals.Checked = Main.Opt.ShowVertexNormals
+	If chkSolidShowCornerNormals.IsInitialized Then chkSolidShowCornerNormals.Checked = Main.Opt.ShowCornerNormals
 	If txtSolidFaceColor.IsInitialized Then txtSolidFaceColor.Text = FormatColor(Main.Opt.FaceColor)
 	If pnlSolidFaceColorPreview.IsInitialized Then pnlSolidFaceColorPreview.Color = Main.Opt.FaceColor
 	If txtSolidEdgeColor.IsInitialized Then txtSolidEdgeColor.Text = FormatColor(Main.Opt.EdgeColor)
@@ -1313,6 +1465,10 @@ Private Sub UpdateRenderSettingsUI
 	If chkWireShowCamera.IsInitialized Then chkWireShowCamera.Checked = Main.WireOpt.ShowCamera
 	If chkWireShowLights.IsInitialized Then chkWireShowLights.Checked = Main.WireOpt.ShowLights
 	If chkWireShowAxes.IsInitialized Then chkWireShowAxes.Checked = Main.WireOpt.ShowOriginAxes
+	If chkWireShowWorldGrid.IsInitialized Then chkWireShowWorldGrid.Checked = Main.WireOpt.ShowWorldGrid
+	If chkWireShowFaceNormals.IsInitialized Then chkWireShowFaceNormals.Checked = Main.WireOpt.ShowFaceNormals
+	If chkWireShowVertexNormals.IsInitialized Then chkWireShowVertexNormals.Checked = Main.WireOpt.ShowVertexNormals
+	If chkWireShowCornerNormals.IsInitialized Then chkWireShowCornerNormals.Checked = Main.WireOpt.ShowCornerNormals
 	If txtWireFaceColor.IsInitialized Then txtWireFaceColor.Text = FormatColor(Main.WireOpt.FaceColor)
 	If pnlWireFaceColorPreview.IsInitialized Then pnlWireFaceColorPreview.Color = Main.WireOpt.FaceColor
 	If txtWireEdgeColor.IsInitialized Then txtWireEdgeColor.Text = FormatColor(Main.WireOpt.EdgeColor)
